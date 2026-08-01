@@ -394,6 +394,7 @@ body{
       <button class="tab active" data-tab="mat" onclick="switchTab('mat')">재료</button>
       <button class="tab" data-tab="svt" onclick="switchTab('svt')">서번트</button>
       <button class="tab" data-tab="evt" onclick="switchTab('evt')">이벤트</button>
+      <button class="tab" data-tab="a11" onclick="switchTab('a11')">11주년</button>
     </div>
     <div class="lp-search">
       <input type="text" id="lpSrch" placeholder="이름 검색…" oninput="filterPool()"/>
@@ -453,6 +454,7 @@ body{
         <option value="tier">표3 (티어표)</option>
       </select>
       <button class="btn" onclick="addRow()">+ 행 추가</button>
+      <button class="btn" onclick="preset11th()" title="11주년 예장 교환표 양식">11주년 교환표</button>
       <button class="btn" id="btnHdr" onclick="addHeaderRow()" style="display:none">+ 헤더</button>
       <button class="btn" onclick="clearAll()" style="margin-left:auto;color:var(--t3)">초기화</button>
       <button class="btn save" onclick="exportPNG()">PNG 저장</button>
@@ -500,7 +502,48 @@ body{
 <script>
 /* ══ STATE ══ */
 let server = 'KR';
-let data = { mat:[], svt:[], evt:[] };
+let data = { mat:[], svt:[], evt:[], a11:[] };
+
+/* ══ 11주년(FGOフェス2026) 기념 예장 대상 서번트 ══
+   이미지: assets/11th/*.webp (appmedia 공개 일러스트에서 얼굴 크롭)
+   공개분 34/48기 — 추가 공개 시 아래 배열에 { f, n } 한 줄 추가 */
+const A11_BASE_ID = 9110000;
+const A11_LIST = [
+  { f:'nemo',        n:'네모' },
+  { f:'demeter',     n:'데메테르' },
+  { f:'percival',    n:'퍼시빌' },
+  { f:'hanasaki',    n:'하나사키오키나' },
+  { f:'unknown0703', n:'레이디 아발론' },
+  { f:'britomart',   n:'브리토마트' },
+  { f:'gilgamesh',   n:'길가메쉬' },
+  { f:'asclepius',   n:'아스클레피오스' },
+  { f:'sei',         n:'세이쇼나곤' },
+  { f:'illya',       n:'이리야스필' },
+  { f:'baobhan',     n:'요정기사 트리스탄' },
+  { f:'kama',        n:'카마' },
+  { f:'tut',         n:'투탕카멘' },
+  { f:'alexander',   n:'알렉산더' },
+  { f:'elmelloi',    n:'제갈공명(엘멜로이Ⅱ세)' },
+  { f:'musashi',     n:'미야모토 무사시' },
+  { f:'monte',       n:'암굴왕 몬테 크리스토' },
+  { f:'arthur',      n:'아서 펜드래곤(프로토타입)' },
+  { f:'typhon',      n:'튀폰 에페메로스' },
+  { f:'louhi',       n:'로우히' },
+  { f:'moriarty',    n:'제임스 모리어티' },
+  { f:'caren',       n:'아무르(카렌)' },
+  { f:'todo',        n:'도도 헤이스케' },
+  { f:'morgan',      n:'모르간' },
+  { f:'harada',      n:'하라다 사노스케' },
+  { f:'nero',        n:'네로 클라우디우스' },
+  { f:'iori',        n:'미야모토 이오리' },
+  { f:'davinci',     n:'레오나르도 다 빈치' },
+  { f:'xufu',        n:'서복' },
+  { f:'molay',       n:'자크 드 몰레(검)' },
+  { f:'tenochtitlan',n:'테노치티틀란' },
+  { f:'lanling',     n:'난릉왕' },
+  { f:'indra',       n:'인드라' },
+  { f:'gogh',        n:'반 고흐(마이너)' },
+];
 let loaded = {};
 let loading = {};
 let curTab = 'mat';
@@ -522,7 +565,7 @@ window.onload = () => setTimeout(() => { switchTab('mat'); applyLayout(); initRe
 /* ══ SERVER ══ */
 function changeSrv() {
   server = document.getElementById('gSrv').value;
-  data = { mat:[], svt:[], evt:[] };
+  data = { mat:[], svt:[], evt:[], a11:[] };
   loaded = {};
   loading = {};
   loadTab(curTab);
@@ -560,6 +603,7 @@ async function loadTab(tab) {
       if (!loaded._items) await loadAllItems();
     }
     if (tab === 'svt') await loadServants();
+    if (tab === 'a11') load11th();
     loaded[tab] = true;
     loading[tab] = false;
     if (tab === 'svt') applySvtFilter();
@@ -716,6 +760,44 @@ async function loadAllItems() {
   });
 
   loaded._items = true;
+}
+
+/* ══ 11주년 예장 대상 서번트 (로컬 이미지) ══ */
+function load11th() {
+  data.a11 = A11_LIST.map((s, i) => ({
+    id: A11_BASE_ID + i,
+    name: s.n,
+    icon: `assets/11th/${s.f}.webp`,
+    isSvt: true,
+  }));
+}
+
+/* 11주년 교환표 양식 */
+function preset11th() {
+  const PRESET = [
+    { label:'요구',        color:'#f0932b' },
+    { label:'완구',        color:'#eb4a7f' },
+    { label:'요구만 교환', color:'#9b59b6' },
+    { label:'양도(여)',    color:'#4caf50' },
+    { label:'양도(남)',    color:'#2f9bd8' },
+  ];
+  if (rows.length && !confirm('현재 표를 지우고 11주년 교환표 양식으로 바꿀까요?')) return;
+  document.getElementById('layout').value = 'tier';
+  curLayout = 'tier';
+  const ea = document.getElementById('exportArea');
+  ea.classList.remove('tpl-class','tpl-daily');
+  ea.classList.add('tpl-tier');
+  ea.style.removeProperty('--rlw');
+  document.getElementById('btnHdr').style.display = 'none';
+  rows = PRESET.map(p => ({
+    id: ++rowCnt, label: p.label, labelIcon: null, items: [],
+    isHeader: false, tag: '', hideLicon: true, hideLabel: false, hideTag: true, color: p.color,
+  }));
+  activeRowId = rows[0].id;
+  const ti = document.getElementById('tableTitle');
+  if (ti && (!ti.value.trim() || ti.value.trim() === '테이블')) { ti.value = 'FGO 11주년 예장 교환'; syncTitle(); }
+  switchTab('a11');
+  rerender();
 }
 
 async function loadServants() {
