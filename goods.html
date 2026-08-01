@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>공구 잔여 표시</title>
+<title>소분을 하자</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -31,6 +31,16 @@ body{
 .sel-i{background:var(--bg);color:var(--t1);border:1px solid var(--line);border-radius:5px;
   padding:0 8px;height:30px;font-size:12px;font-family:inherit;max-width:190px;vertical-align:middle}
 .sep{width:1px;height:18px;background:var(--line);margin:0 2px;flex-shrink:0}
+.btn.help{width:30px;padding:0;border-radius:50%;font-weight:700;color:var(--t2)}
+.help-wrap{position:relative;display:inline-flex;align-items:center}
+.help-pop{position:absolute;left:0;top:36px;width:330px;background:var(--s1);
+  border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.14);
+  padding:12px 14px;font-size:12px;line-height:1.75;color:var(--t1);z-index:60;display:none}
+.help-wrap:hover .help-pop,.help-pop.open{display:block}
+.help-pop b{color:var(--acc);font-size:11.5px;letter-spacing:.02em}
+.help-pop ul{margin:2px 0 9px;padding-left:16px}
+.help-pop li{color:var(--t2)}
+.help-pop li b{color:var(--t1);font-size:12px}
 .menu{position:absolute;right:12px;top:46px;background:var(--s1);border:1px solid var(--line);
   border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:4px;display:none;z-index:50;min-width:150px}
 .menu.open{display:block}
@@ -80,7 +90,7 @@ body.placing #layer{cursor:copy}
 <body>
 
 <div class="topbar">
-  <h1>공구 <span>잔여 표시</span></h1>
+  <h1>소분을 <span>하자</span></h1>
   <select class="sel-i" id="projSel" onchange="openProject(this.value)"></select>
   <button class="btn" onclick="newProject()">+ 새 공구</button>
   <div class="sep"></div>
@@ -89,6 +99,26 @@ body.placing #layer{cursor:copy}
   <button class="btn" onclick="scaleMarks(1/1.18)" title="숫자 전체 작게">크기−</button>
   <div class="sep"></div>
   <button class="btn" onclick="undo()">되돌리기</button>
+  <span class="help-wrap">
+    <button class="btn help" onclick="toggleHelp(event)" aria-label="사용법">?</button>
+    <div class="help-pop" id="helpPop">
+      <b>숫자 표식</b>
+      <ul>
+        <li><b>+숫자</b> 버튼 또는 <b>빈 공간 더블클릭</b> → 숫자 입력</li>
+        <li>숫자를 <b>드래그</b>해서 이동</li>
+        <li>숫자 <b>클릭 후 Delete</b> → 삭제</li>
+        <li><b>크기+ / 크기−</b>로 숫자 전체 크기 조절</li>
+      </ul>
+      <b>화이트 처리</b>
+      <ul>
+        <li>마우스 <b>드래그</b>로 화이트 처리</li>
+        <li>화이트 부분 <b>클릭</b> → 이동·크기 조절</li>
+        <li><b>한 번 더 클릭</b>(또는 더블클릭) → 사라짐</li>
+      </ul>
+      <b>공통</b>
+      <ul><li><b>Ctrl+Z</b> 되돌리기 · <b>Esc</b> 선택 해제</li></ul>
+    </div>
+  </span>
   <span style="margin-left:auto"></span>
   <button class="btn acc" onclick="exportPNG()">PNG 저장</button>
   <button class="btn" onclick="toggleMenu(event)">⋯</button>
@@ -262,7 +292,7 @@ async function handleFile(file) {
   const blob = await downscale(file, 2400);
   await setImageFromBlob(blob);
   renderAll();
-  setSb('드래그 = 가리기 · 흰 칸 클릭 = 선택(이동·크기조절) · 더블클릭/Delete = 되살리기');
+  setSb('드래그 = 화이트 처리 · 빈 곳 더블클릭 = 숫자 · 오른쪽 ? 에 사용법');
 }
 function downscale(file, maxSide) {
   return new Promise(res => {
@@ -351,8 +381,9 @@ layer.addEventListener('pointerdown', e => {
       drag = { type: 'kresize', i, r: hd.dataset.r, sx: e.clientX, sy: e.clientY, o: { ...P.masks[i] }, moved: false };
       return;
     }
-    if (selMask !== i) { selMask = i; renderAll(); }
-    drag = { type: 'kmove', i, sx: e.clientX, sy: e.clientY, o: { ...P.masks[i] }, moved: false };
+    const already = (selMask === i);
+    if (!already) { selMask = i; renderAll(); }
+    drag = { type: 'kmove', i, already, sx: e.clientX, sy: e.clientY, o: { ...P.masks[i] }, moved: false };
     return;
   }
   if (placing) { drag = { type: 'place', px: p.x, py: p.y }; return; }
@@ -415,7 +446,8 @@ layer.addEventListener('pointerup', e => {
   }
   if (d.type === 'kmove' || d.type === 'kresize') {
     if (d.moved) { save(); setSb(d.type === 'kmove' ? '이동' : '크기 변경'); }
-    else setSb('선택됨 · 끌어서 이동 · 모서리로 크기 조절 · 더블클릭/Delete 삭제');
+    else if (d.already) deleteMask(d.i);            // 선택된 걸 한 번 더 클릭 = 사라짐
+    else setSb('선택됨 · 끌어서 이동 · 모서리로 크기 조절 · 한 번 더 클릭하면 사라짐');
     return;
   }
   if (d.type === 'place') { addMark(d.px, d.py); return; }
@@ -427,7 +459,7 @@ layer.addEventListener('pointerup', e => {
     if (!(d.moved && w > 0.008 && h > 0.008)) { undoStack.pop(); return; }   // 그냥 클릭이면 아무것도 안 함
     P.masks.push({ x, y, w, h });
     P.lastSize = { w, h };
-    setSb('가림 · 클릭하면 선택(이동·크기조절) · 더블클릭이면 되살리기');
+    setSb('화이트 처리 · 클릭 = 선택(이동·크기조절) · 한 번 더 클릭 = 사라짐');
     save(); renderAll();
   }
 });
@@ -486,21 +518,28 @@ document.addEventListener('keydown', e => {
     else if (selMask !== null) { e.preventDefault(); deleteMask(selMask); }
   }
 });
-/* 더블클릭: 숫자 = 값 변경 · 흰 박스 = 삭제 */
+/* 더블클릭: 숫자 = 값 변경 · 빈 공간 = 그 자리에 숫자 추가
+   (흰 박스는 두 번째 클릭에서 이미 삭제되므로 여기서 처리하지 않는다) */
 layer.addEventListener('dblclick', e => {
   const m = e.target.closest('[data-t="m"]');
   if (m) { e.preventDefault(); editMark(+m.dataset.i); return; }
-  const k = e.target.closest('[data-t="k"]');
-  if (k) { e.preventDefault(); deleteMask(+k.dataset.i); }
+  if (e.target.closest('[data-t="k"]')) return;
+  e.preventDefault();
+  const p = toN(e);
+  addMark(clamp01(p.x), clamp01(p.y));
 });
 function deleteMask(i) {
   if (i === null || !P.masks[i]) return;
   snap(); P.masks.splice(i, 1); selMask = null;
   save(); renderAll(); setSb('되살림');
 }
-function toggleMenu(e) { e.stopPropagation(); $('menu').classList.toggle('open'); }
+function toggleMenu(e) { e.stopPropagation(); $('helpPop').classList.remove('open'); $('menu').classList.toggle('open'); }
 const closeMenu = () => $('menu').classList.remove('open');
-document.addEventListener('click', e => { if (!e.target.closest('.menu') && !e.target.closest('.topbar .btn')) closeMenu(); });
+function toggleHelp(e) { e.stopPropagation(); closeMenu(); $('helpPop').classList.toggle('open'); }
+document.addEventListener('click', e => {
+  if (!e.target.closest('.menu') && !e.target.closest('.topbar .btn')) closeMenu();
+  if (!e.target.closest('.help-wrap')) $('helpPop').classList.remove('open');
+});
 
 /* ══════════ 입력 ══════════ */
 $('imgIn').addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); e.target.value = ''; });
