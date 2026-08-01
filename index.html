@@ -260,6 +260,11 @@ body{
 .tpl-daily .trow.hdr-row .ritems{display:none}
 .tpl-daily .trow:not(.hdr-row) .rlabel{width:var(--rlw,82px);min-width:0;max-width:none}
 
+/* ══ 11주년(FGO Fes 2026) UI 숨김 ══
+   행사가 끝나 버튼만 감춰둔 상태. 코드·A11_LIST·assets/11th 는 그대로 살아 있다.
+   다시 쓰려면 아래 한 줄만 지우면 된다. (2026-08-01) */
+.a11-ui{display:none!important}
+
 /* ── 레이아웃: 티어표 (표3) ── */
 .tpl-tier .ex-body{gap:0;padding:0}
 .tpl-tier .trow{border-radius:0;border-left:none;border-right:none;border-top:none;border-bottom:2px solid var(--eb,#111);background:var(--rb,#1a1a1a)}
@@ -408,7 +413,7 @@ body{
       <button class="tab active" data-tab="mat" onclick="switchTab('mat')">재료</button>
       <button class="tab" data-tab="svt" onclick="switchTab('svt')">서번트</button>
       <button class="tab" data-tab="evt" onclick="switchTab('evt')">이벤트</button>
-      <button class="tab" data-tab="a11" onclick="switchTab('a11')">11주년</button>
+      <button class="tab a11-ui" data-tab="a11" onclick="switchTab('a11')">11주년</button>
     </div>
     <div class="lp-search">
       <input type="text" id="lpSrch" placeholder="이름 검색…" oninput="filterPool()"/>
@@ -468,7 +473,7 @@ body{
         <option value="tier">표3 (티어표)</option>
       </select>
       <button class="btn" onclick="addRow()">+ 행 추가</button>
-      <button class="btn" onclick="preset11th()" title="11주년 예장 교환표 양식">11주년 교환표</button>
+      <button class="btn a11-ui" onclick="preset11th()" title="11주년 예장 교환표 양식">11주년 교환표</button>
       <button class="btn" id="btnHdr" onclick="addHeaderRow()" style="display:none">+ 헤더</button>
       <button class="btn" onclick="clearAll()" style="margin-left:auto;color:var(--t3)">초기화</button>
       <button class="btn save" onclick="exportPNG()">PNG 저장</button>
