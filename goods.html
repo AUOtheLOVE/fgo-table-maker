@@ -185,6 +185,7 @@ const LS_IDX = 'fgogoods.index';
 const LS_P = id => 'fgogoods.p.' + id;
 const DEF_SIZE = { w: 0.09, h: 0.16 };
 const DEF_FS = 0.026;
+const MAX_SIDE = 6000;   // 이 값 이하면 원본 해상도·원본 파일 그대로 보관 (화질 손실 없음)
 const CLICK_PX = 6;
 
 let P = null, img = null;
@@ -329,10 +330,11 @@ async function handleFile(file) {
   if (!file || !file.type.startsWith('image/')) return;
   if (!P) { newProject(); if (!P) return; }
   setSb('이미지 처리 중…');
-  const blob = await downscale(file, 2400);
+  const blob = await downscale(file, MAX_SIDE);   // 한도 이하면 원본 그대로(재인코딩 없음)
   await setImageFromBlob(blob);
   renderAll();
-  setSb('드래그 = 화이트 처리 · 빈 곳 더블클릭 = 숫자 · 오른쪽 ? 에 사용법');
+  const shrunk = Math.max(P.imgW, P.imgH) >= MAX_SIDE;
+  setSb(`${P.imgW}×${P.imgH}${shrunk ? ' (너무 커서 축소됨)' : ' 원본 해상도'} · 드래그 = 화이트 처리 · 빈 곳 더블클릭 = 숫자`);
 }
 function downscale(file, maxSide) {
   return new Promise(res => {
