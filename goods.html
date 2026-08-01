@@ -90,7 +90,7 @@ body.placing #layer{cursor:copy}
 <body>
 
 <div class="topbar">
-  <h1>소분을 <span>하자</span></h1>
+  <h1><span>소분</span>을 하자</h1>
   <select class="sel-i" id="projSel" onchange="openProject(this.value)"></select>
   <button class="btn" onclick="newProject()">+ 새 공구</button>
   <div class="sep"></div>
@@ -331,15 +331,16 @@ function renderAll() {
   $('emptyBox').style.display = has ? 'none' : 'block';
   if (!has) { $('layer').innerHTML = ''; return; }
   const wpx = $('baseImg').clientWidth || 1;
+  // 숫자(marks)를 먼저 → 흰 박스(masks)가 위층. 화이트로 덮으면 숫자도 가려진다
   $('layer').innerHTML =
+    P.marks.map((m, i) =>
+      `<div class="mark${i === selMark ? ' sel' : ''}" data-t="m" data-i="${i}"
+        style="left:${m.x*100}%;top:${m.y*100}%;font-size:${Math.max(9,(P.fs||DEF_FS)*wpx)}px">+${m.n}</div>`).join('') +
     P.masks.map((m, i) =>
       `<div class="mask${i === selMask ? ' sel' : ''}" data-t="k" data-i="${i}"
         style="left:${m.x*100}%;top:${m.y*100}%;width:${m.w*100}%;height:${m.h*100}%">${
         i === selMask ? ['nw','n','ne','e','se','s','sw','w'].map(r => `<div class="mh ${r}" data-r="${r}"></div>`).join('') : ''
-      }</div>`).join('') +
-    P.marks.map((m, i) =>
-      `<div class="mark${i === selMark ? ' sel' : ''}" data-t="m" data-i="${i}"
-        style="left:${m.x*100}%;top:${m.y*100}%;font-size:${Math.max(9,(P.fs||DEF_FS)*wpx)}px">+${m.n}</div>`).join('');
+      }</div>`).join('');
 }
 window.addEventListener('resize', () => { if (P && img) renderAll(); });
 
@@ -558,9 +559,6 @@ function exportPNG() {
   c.width = img.naturalWidth; c.height = img.naturalHeight;
   const x = c.getContext('2d');
   x.drawImage(img, 0, 0);
-  x.fillStyle = 'rgba(255,255,255,0.92)';
-  for (const m of P.masks)
-    x.fillRect(m.x * c.width, m.y * c.height, m.w * c.width, m.h * c.height);
   for (const m of P.marks) {
     const fs = Math.max(10, (P.fs || DEF_FS) * c.width);
     x.font = `800 ${fs}px system-ui,'Noto Sans KR',sans-serif`;
@@ -571,6 +569,9 @@ function exportPNG() {
     x.fillStyle = '#fff'; x.textBaseline = 'middle'; x.textAlign = 'center';
     x.fillText(t, bx + bw / 2, by + bh / 2 + fs * 0.03);
   }
+  x.fillStyle = 'rgba(255,255,255,0.92)';
+  for (const m of P.masks)
+    x.fillRect(m.x * c.width, m.y * c.height, m.w * c.width, m.h * c.height);
   const a = document.createElement('a');
   a.download = (P.name || '공구').replace(/[^\w가-힣\s-]/g, '').trim().replace(/\s+/g, '_') + '_잔여.png';
   a.href = c.toDataURL('image/png'); a.click();
