@@ -606,6 +606,7 @@ function switchTab(tab) {
   document.getElementById('matFilters').style.display = (tab === 'mat') ? 'flex' : 'none';
   if (!loaded[tab]) loadTab(tab);
   else if (tab === 'svt') applySvtFilter();
+  else if (tab === 'a11') filterPool();
   else renderPool(data[tab]);
 }
 
@@ -633,6 +634,7 @@ async function loadTab(tab) {
     loaded[tab] = true;
     loading[tab] = false;
     if (tab === 'svt') applySvtFilter();
+    else if (tab === 'a11') filterPool();
     else { renderPool(data[tab]); setFoot(`${data[tab].length}개`); }
   } catch(e) {
     loading[tab] = false;
@@ -881,10 +883,21 @@ function renderModal(items) {
 }
 
 /* ══ FILTER ══ */
+/* 11주년 탭: 이미 표에 넣은 서번트 id 집합 (중복 배치 방지) */
+function usedA11Ids() {
+  const s = new Set();
+  rows.forEach(r => r.items.forEach(it => { if (it.id != null) s.add(it.id); }));
+  return s;
+}
+
 function filterPool() {
   if (curTab === 'svt') { applySvtFilter(); return; }
   const q = document.getElementById('lpSrch').value.toLowerCase();
   let items = data[curTab] || [];
+  if (curTab === 'a11') {
+    const used = usedA11Ids();
+    items = items.filter(it => !used.has(it.id));
+  }
   if (curTab === 'mat' && matBgFilter.size) {
     items = items.filter(it => {
       const std = ['gold','silver','bronze'].includes(it.bg);
@@ -1209,6 +1222,7 @@ function rerender() {
   const body = document.getElementById('exBody');
   if (!rows.length) {
     body.innerHTML='<div style="padding:40px;text-align:center;color:#888;font-size:12px">[+ 행 추가] 후 왼쪽에서 아이콘 클릭</div>';
+    if (curTab === 'a11' && loaded.a11) filterPool();
     return;
   }
 
@@ -1322,6 +1336,8 @@ function rerender() {
     }
   }
   body.innerHTML = h;
+  // 11주년 탭: 표에 들어간 서번트는 좌측 목록에서 숨김 (빼면 다시 나타남)
+  if (curTab === 'a11' && loaded.a11) filterPool();
 }
 
 function clearLicon(rowId) {
