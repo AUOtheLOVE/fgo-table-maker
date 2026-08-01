@@ -278,10 +278,11 @@ body{
 
 /* ── 11주년 교환표 (티어표 위에 덧씌움) ── */
 .tpl-a11 .rlabel{width:var(--rlw,142px);padding:8px 5px}
+.tpl-a11 .rlabel{align-items:center;justify-content:center}
 .tpl-a11 .ltxt{
-  font-size:15px;line-height:1.45;height:auto;min-height:74px;
-  white-space:pre-line;font-weight:800;letter-spacing:-.01em;
-  overflow:hidden;resize:none;
+  font-size:19px;line-height:1.4;height:auto;min-height:0;
+  white-space:pre-line;font-weight:800;letter-spacing:-.02em;
+  overflow:hidden;resize:none;text-align:center;padding:0;
 }
 .tpl-a11 .ritems{gap:2px;padding:2px;min-height:0;align-content:flex-start}
 .tpl-a11 .ric{width:112px;height:112px}
@@ -1013,6 +1014,11 @@ function cycleColor(id) {
 function updateLabel(id, v) {
   const r = rows.find(r => r.id === id);
   if (r) r.label = v;
+  const ta = document.getElementById('ltxt-' + id);
+  if (ta && document.getElementById('exportArea').classList.contains('tpl-a11')) {
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
+  }
 }
 
 function removeItem(rowId, idx) {
@@ -1336,6 +1342,13 @@ function rerender() {
     }
   }
   body.innerHTML = h;
+  // 11주년 교환표: 라벨 textarea를 내용 높이에 맞춤 (세로 중앙 정렬용)
+  if (document.getElementById('exportArea').classList.contains('tpl-a11')) {
+    body.querySelectorAll('.ltxt').forEach(ta => {
+      ta.style.height = 'auto';
+      ta.style.height = ta.scrollHeight + 'px';
+    });
+  }
   // 11주년 탭: 표에 들어간 서번트는 좌측 목록에서 숨김 (빼면 다시 나타남)
   if (curTab === 'a11' && loaded.a11) filterPool();
 }
