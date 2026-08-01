@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>공구 잔여 표시</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f7f5f0; --s1:#ffffff; --s2:#f0ede8; --s3:#e8e4de; --line:#ddd9d2;
+  --t1:#1a1814; --t2:#6b6660; --t3:#aaa49e; --acc:#9a7c2e; --acc2:#7a5e1e;
+  --sel:#2f9bd8;
+}
+body{
+  background:var(--bg);color:var(--t1);
+  font-family:'Segoe UI','Noto Sans KR',system-ui,sans-serif;
+  height:100vh;display:flex;flex-direction:column;overflow:hidden;
+  font-size:13px;line-height:1.5;
+}
+.topbar{background:var(--s1);border-bottom:1px solid var(--line);padding:8px 14px;
+  display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap}
+.topbar h1{font-size:14px;font-weight:600;letter-spacing:.02em}
+.topbar h1 span{color:var(--acc)}
+.toolbar{background:var(--s1);border-bottom:1px solid var(--line);padding:7px 14px;
+  display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap}
+.btn{background:var(--s2);color:var(--t1);border:1px solid var(--line);border-radius:4px;
+  padding:5px 11px;font-size:12px;cursor:pointer;white-space:nowrap;transition:background .1s,border-color .1s}
+.btn:hover{background:var(--s3);border-color:var(--t3)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.acc{border-color:var(--acc);color:var(--acc)}
+.btn.acc:hover{background:var(--acc);color:#fff}
+.btn.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.btn.dl:hover{background:#c0392b;color:#fff;border-color:#c0392b}
+.sel-i{background:var(--bg);color:var(--t1);border:1px solid var(--line);border-radius:4px;
+  padding:5px 8px;font-size:12px;max-width:200px}
+.num{width:52px;background:var(--bg);border:1px solid var(--line);border-radius:4px;
+  padding:4px 6px;font-size:12px;color:var(--t1)}
+.sep{width:1px;height:16px;background:var(--line);margin:0 3px;flex-shrink:0}
+.lbl{font-size:11px;color:var(--t2);white-space:nowrap}
+.seg{display:flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.seg button{background:var(--s2);border:none;padding:5px 12px;font-size:12px;cursor:pointer;color:var(--t2)}
+.seg button.on{background:var(--acc);color:#fff}
+
+.wrap{display:flex;flex:1;overflow:hidden}
+.side{width:214px;border-right:1px solid var(--line);background:var(--s1);
+  display:flex;flex-direction:column;flex-shrink:0}
+.side h2{font-size:11px;color:var(--t2);padding:8px 10px 6px;border-bottom:1px solid var(--line);font-weight:600}
+.hlist{flex:1;overflow-y:auto;padding:5px}
+.hlist::-webkit-scrollbar{width:4px}
+.hlist::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px}
+.hrow{display:flex;align-items:center;gap:5px;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:12px}
+.hrow:hover{background:var(--s2)}
+.hrow.on{background:var(--s3);outline:1px solid var(--acc)}
+.hrow.done{color:var(--t3);text-decoration:line-through}
+.hrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hrow .q{font-weight:700;color:var(--acc);font-variant-numeric:tabular-nums}
+.side-foot{padding:6px 10px;border-top:1px solid var(--line);font-size:11px;color:var(--t2)}
+
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.canvas-scroll{flex:1;overflow:auto;padding:16px;display:flex;justify-content:center;align-items:flex-start}
+#stage{position:relative;display:inline-block;line-height:0;box-shadow:0 2px 12px rgba(0,0,0,.12);
+  background:#fff;max-width:100%}
+#baseImg{display:block;max-width:100%;height:auto;user-select:none;-webkit-user-drag:none}
+#layer{position:absolute;inset:0;touch-action:none}
+.hs{position:absolute;border:2px solid rgba(47,155,216,.85);border-radius:2px;
+  cursor:pointer;line-height:1.2}
+.hs.done{background:rgba(255,255,255,.88);border-color:rgba(180,180,180,.9)}
+.hs.sel{border-color:var(--acc);box-shadow:0 0 0 2px rgba(154,124,46,.35)}
+.hs .qty{position:absolute;top:-2px;right:-2px;background:#e02020;color:#fff;
+  font-size:13px;font-weight:800;padding:1px 5px;border-radius:3px;
+  font-family:system-ui,sans-serif;pointer-events:none;letter-spacing:-.02em}
+.hs.done .qty{display:none}
+.hs .hd{position:absolute;width:11px;height:11px;background:#fff;border:2px solid var(--acc);
+  border-radius:2px;display:none}
+.hs.sel .hd{display:block}
+.hs .hd.nw{left:-6px;top:-6px;cursor:nwse-resize}
+.hs .hd.ne{right:-6px;top:-6px;cursor:nesw-resize}
+.hs .hd.sw{left:-6px;bottom:-6px;cursor:nesw-resize}
+.hs .hd.se{right:-6px;bottom:-6px;cursor:nwse-resize}
+.mode-run .hs{border-color:rgba(47,155,216,.55)}
+.mode-run .hs .hd{display:none!important}
+#rubber{position:absolute;border:2px dashed var(--acc);background:rgba(154,124,46,.12);display:none;pointer-events:none}
+.statusbar{background:var(--s1);border-top:1px solid var(--line);padding:5px 14px;font-size:11px;color:var(--t2);flex-shrink:0}
+.empty{padding:60px 20px;text-align:center;color:var(--t3);font-size:13px;line-height:2}
+.drop{border:2px dashed var(--line);border-radius:8px;padding:40px;text-align:center;color:var(--t2);background:var(--s1)}
+.drop.over{border-color:var(--acc);background:var(--s2)}
+@media(max-width:760px){
+  .side{display:none}
+  .topbar,.toolbar{padding:6px 8px;gap:5px}
+  .btn{padding:6px 10px}
+  .canvas-scroll{padding:6px}
+  .pc-only{display:none!important}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>공구 <span>잔여 표시</span></h1>
+  <select class="sel-i" id="projSel" onchange="openProject(this.value)"></select>
+  <button class="btn" onclick="newProject()">+ 새 공구</button>
+  <button class="btn pc-only" onclick="renameProject()">이름</button>
+  <button class="btn dl pc-only" onclick="deleteProject()">삭제</button>
+  <span style="margin-left:auto"></span>
+  <button class="btn pc-only" onclick="exportJSON()">백업 저장</button>
+  <button class="btn pc-only" onclick="document.getElementById('jsonIn').click()">백업 불러오기</button>
+  <button class="btn acc" onclick="exportPNG()">PNG 저장</button>
+  <a class="btn pc-only" href="index.html" style="text-decoration:none;line-height:1.6">테이블 메이커 →</a>
+</div>
+
+<div class="toolbar" id="tb">
+  <div class="seg">
+    <button id="mEdit" class="on" onclick="setMode('edit')">편집</button>
+    <button id="mRun" onclick="setMode('run')">운영</button>
+  </div>
+  <div class="sep"></div>
+  <span id="editTools" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+    <button class="btn" onclick="autoDetect()">자동 인식</button>
+    <span class="lbl">감도</span>
+    <input class="num" id="thr" type="number" value="70" min="10" max="200" step="5" style="width:56px"/>
+    <button class="btn" onclick="gridSnap()">격자 정렬</button>
+    <div class="sep"></div>
+    <span class="lbl">행</span><input class="num" id="gRow" type="number" value="4" min="1" max="30"/>
+    <span class="lbl">열</span><input class="num" id="gCol" type="number" value="6" min="1" max="30"/>
+    <button class="btn" id="btnGrid" onclick="startGridArea()">영역에 격자</button>
+    <div class="sep"></div>
+    <button class="btn dl" onclick="clearHotspots()">전체 지우기</button>
+  </span>
+  <span style="margin-left:auto;display:flex;gap:6px;align-items:center">
+    <button class="btn" id="btnQty" onclick="toggleQty()">숫자 표시</button>
+    <button class="btn" onclick="undo()">되돌리기</button>
+    <button class="btn pc-only" onclick="document.getElementById('imgIn').click()">이미지 교체</button>
+  </span>
+</div>
+
+<div class="wrap">
+  <div class="side pc-only">
+    <h2>품목 목록</h2>
+    <div class="hlist" id="hlist"></div>
+    <div class="side-foot" id="sfoot">-</div>
+  </div>
+  <div class="main">
+    <div class="canvas-scroll" id="scroll">
+      <div id="stageBox">
+        <div class="empty" id="emptyBox">
+          <div class="drop" id="drop">
+            이미지를 여기로 끌어다 놓거나 붙여넣기(Ctrl+V)<br/>
+            <button class="btn acc" style="margin-top:12px" onclick="document.getElementById('imgIn').click()">이미지 선택</button>
+          </div>
+        </div>
+        <div id="stage" style="display:none">
+          <img id="baseImg" alt=""/>
+          <div id="layer"></div>
+          <div id="rubber"></div>
+        </div>
+      </div>
+    </div>
+    <div class="statusbar" id="sb">준비</div>
+  </div>
+</div>
+
+<input type="file" id="imgIn" accept="image/*" style="display:none"/>
+<input type="file" id="jsonIn" accept="application/json,.json" style="display:none"/>
+
+<script>
+/* ══════════ 상태 ══════════ */
+const LS_IDX = 'fgogoods.index';
+const LS_P   = id => 'fgogoods.p.' + id;
+
+let P = null;          // 현재 프로젝트 {id,name,hotspots,showQty,imgW,imgH}
+let img = null;        // HTMLImageElement (원본)
+let mode = 'edit';
+let selId = null;
+let undoStack = [];
+let gridAreaMode = false;
+let hotCnt = 0;
+
+const $ = id => document.getElementById(id);
+const setSb = t => $('sb').textContent = t;
+
+/* ══════════ IndexedDB (이미지 원본) ══════════ */
+function idb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('fgogoods', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('images');
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function idbPut(k, blob) {
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const t = db.transaction('images', 'readwrite');
+    t.objectStore('images').put(blob, k);
+    t.oncomplete = res; t.onerror = () => rej(t.error);
+  });
+}
+async function idbGet(k) {
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const t = db.transaction('images', 'readonly');
+    const q = t.objectStore('images').get(k);
+    q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error);
+  });
+}
+async function idbDel(k) {
+  const db = await idb();
+  return new Promise(res => {
+    const t = db.transaction('images', 'readwrite');
+    t.objectStore('images').delete(k); t.oncomplete = res;
+  });
+}
+
+/* ══════════ 프로젝트 ══════════ */
+function loadIndex() { try { return JSON.parse(localStorage.getItem(LS_IDX)) || []; } catch { return []; } }
+function saveIndex(ix) { localStorage.setItem(LS_IDX, JSON.stringify(ix)); }
+
+function renderProjSel() {
+  const ix = loadIndex();
+  $('projSel').innerHTML = ix.length
+    ? ix.map(p => `<option value="${p.id}"${P && p.id === P.id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')
+    : '<option value="">(공구 없음)</option>';
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function newProject() {
+  const name = prompt('공구 이름', '공구 ' + new Date().toISOString().slice(5, 10));
+  if (name === null) return;
+  const id = 'g' + Date.now().toString(36);
+  P = { id, name: name || '이름없음', hotspots: [], showQty: true, imgW: 0, imgH: 0 };
+  const ix = loadIndex(); ix.unshift({ id, name: P.name, updatedAt: Date.now() }); saveIndex(ix);
+  img = null; selId = null; undoStack = [];
+  save(); renderProjSel(); renderAll();
+  setSb('새 공구 생성. 이미지를 올리세요.');
+}
+function renameProject() {
+  if (!P) return;
+  const n = prompt('공구 이름', P.name); if (n === null) return;
+  P.name = n || P.name;
+  const ix = loadIndex(); const e = ix.find(x => x.id === P.id); if (e) e.name = P.name;
+  saveIndex(ix); save(); renderProjSel();
+}
+async function deleteProject() {
+  if (!P) return;
+  if (!confirm(`"${P.name}" 삭제할까요? 되돌릴 수 없습니다.`)) return;
+  localStorage.removeItem(LS_P(P.id)); await idbDel(P.id);
+  saveIndex(loadIndex().filter(x => x.id !== P.id));
+  P = null; img = null;
+  const ix = loadIndex();
+  renderProjSel();
+  if (ix.length) openProject(ix[0].id); else { renderAll(); setSb('공구 없음'); }
+}
+async function openProject(id) {
+  if (!id) return;
+  let d; try { d = JSON.parse(localStorage.getItem(LS_P(id))); } catch { d = null; }
+  if (!d) { setSb('불러오기 실패'); return; }
+  P = d; selId = null; undoStack = [];
+  const blob = await idbGet(id);
+  if (blob) await setImageFromBlob(blob, false); else { img = null; }
+  renderProjSel(); renderAll();
+  setSb(`"${P.name}" 열림 · 품목 ${P.hotspots.length}`);
+}
+let saveTimer = null;
+function save() {
+  if (!P) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    localStorage.setItem(LS_P(P.id), JSON.stringify(P));
+    const ix = loadIndex(); const e = ix.find(x => x.id === P.id);
+    if (e) { e.updatedAt = Date.now(); e.name = P.name; saveIndex(ix); }
+  }, 400);
+}
+
+/* ══════════ 이미지 ══════════ */
+async function setImageFromBlob(blob, persist = true) {
+  const url = URL.createObjectURL(blob);
+  await new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => { img = im; res(); };
+    im.onerror = rej;
+    im.src = url;
+  });
+  $('baseImg').src = img.src;
+  P.imgW = img.naturalWidth; P.imgH = img.naturalHeight;
+  if (persist) { await idbPut(P.id, blob); save(); }
+}
+async function handleFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  if (!P) newProject();
+  if (!P) return;
+  setSb('이미지 처리 중…');
+  const blob = await downscale(file, 2400);
+  await setImageFromBlob(blob);
+  renderAll();
+  setSb(`이미지 로드 (${P.imgW}×${P.imgH}) · [자동 인식]을 눌러보세요`);
+}
+function downscale(file, maxSide) {
+  return new Promise(res => {
+    const im = new Image();
+    im.onload = () => {
+      const s = Math.min(1, maxSide / Math.max(im.naturalWidth, im.naturalHeight));
+      if (s >= 1) { res(file); return; }
+      const c = document.createElement('canvas');
+      c.width = Math.round(im.naturalWidth * s); c.height = Math.round(im.naturalHeight * s);
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      c.toBlob(b => res(b || file), 'image/png');
+    };
+    im.onerror = () => res(file);
+    im.src = URL.createObjectURL(file);
+  });
+}
+
+/* ══════════ 되돌리기 ══════════ */
+function snap() {
+  if (!P) return;
+  undoStack.push(JSON.stringify(P.hotspots));
+  if (undoStack.length > 40) undoStack.shift();
+}
+function undo() {
+  if (!undoStack.length) { setSb('되돌릴 작업 없음'); return; }
+  P.hotspots = JSON.parse(undoStack.pop());
+  selId = null; save(); renderAll(); setSb('되돌림');
+}
+
+/* ══════════ 핫스팟 ══════════ */
+function newHot(x, y, w, h, qty) {
+  return { id: 'h' + (++hotCnt) + '_' + Math.random().toString(36).slice(2, 6),
+           x, y, w, h, qty: qty == null ? 1 : qty, max: qty == null ? 1 : qty, name: '' };
+}
+function clearHotspots() {
+  if (!P || !P.hotspots.length) return;
+  if (!confirm('품목 영역을 전부 지울까요?')) return;
+  snap(); P.hotspots = []; selId = null; save(); renderAll();
+}
+function toggleQty() { if (!P) return; P.showQty = !P.showQty; save(); renderAll(); }
+
+/* ══════════ 자동 인식 ══════════ */
+function autoDetect() {
+  if (!img) { setSb('이미지 먼저'); return; }
+  setSb('인식 중…');
+  setTimeout(() => {
+    const T = Math.max(5, +$('thr').value || 70);
+    const boxes = detectBoxes(img, T);
+    if (!boxes.length) { setSb('아무것도 못 찾음. 감도를 낮춰보세요'); return; }
+    snap();
+    P.hotspots = boxes.map(b => newHot(b.x, b.y, b.w, b.h, 1));
+    selId = null; save(); renderAll();
+    setSb(`${boxes.length}개 인식. 격자형이면 [격자 정렬]을 누르세요`);
+  }, 20);
+}
+
+function detectBoxes(image, T) {
+  const MAX = 1100;
+  const s = Math.min(1, MAX / Math.max(image.naturalWidth, image.naturalHeight));
+  const W = Math.max(1, Math.round(image.naturalWidth * s));
+  const H = Math.max(1, Math.round(image.naturalHeight * s));
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(image, 0, 0, W, H);
+  const d = ctx.getImageData(0, 0, W, H).data;
+
+  // 배경색: 테두리 픽셀 중앙값
+  const br = [], bg_ = [], bb = [];
+  const push = (x, y) => { const i = (y * W + x) * 4; br.push(d[i]); bg_.push(d[i+1]); bb.push(d[i+2]); };
+  for (let x = 0; x < W; x += 2) { push(x, 0); push(x, H - 1); }
+  for (let y = 0; y < H; y += 2) { push(0, y); push(W - 1, y); }
+  const med = a => { a.sort((p, q) => p - q); return a[a.length >> 1]; };
+  const BR = med(br), BG = med(bg_), BB = med(bb);
+
+  // 마스크
+  let m = new Uint8Array(W * H);
+  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+    const dv = Math.max(Math.abs(d[i] - BR), Math.abs(d[i+1] - BG), Math.abs(d[i+2] - BB));
+    m[p] = dv > T ? 1 : 0;
+  }
+  const K = 3;                       // 닫힘 연산 반경
+  m = boxMax(m, W, H, K);            // 팽창
+  m = boxMin(m, W, H, K);            // 침식
+  fillHoles(m, W, H);
+
+  // 연결 요소
+  const area = W * H, minArea = area * 0.0012;
+  const lab = new Int32Array(W * H).fill(0);
+  const stack = new Int32Array(W * H);
+  const boxes = [];
+  let cur = 0;
+  for (let p0 = 0; p0 < m.length; p0++) {
+    if (!m[p0] || lab[p0]) continue;
+    cur++;
+    let sp = 0; stack[sp++] = p0; lab[p0] = cur;
+    let x0 = p0 % W, x1 = x0, y0 = (p0 / W) | 0, y1 = y0, cnt = 0;
+    while (sp) {
+      const p = stack[--sp]; cnt++;
+      const x = p % W, y = (p / W) | 0;
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+      if (x > 0     && m[p-1] && !lab[p-1]) { lab[p-1] = cur; stack[sp++] = p - 1; }
+      if (x < W - 1 && m[p+1] && !lab[p+1]) { lab[p+1] = cur; stack[sp++] = p + 1; }
+      if (y > 0     && m[p-W] && !lab[p-W]) { lab[p-W] = cur; stack[sp++] = p - W; }
+      if (y < H - 1 && m[p+W] && !lab[p+W]) { lab[p+W] = cur; stack[sp++] = p + W; }
+    }
+    const w = x1 - x0 + 1, h = y1 - y0 + 1;
+    if (w * h < minArea || w < 10 || h < 10) continue;
+    if (w > W * 0.97 && h > H * 0.97) continue;
+    boxes.push({ x: x0 / W, y: y0 / H, w: w / W, h: h / H });
+  }
+  boxes.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+  return boxes;
+}
+function boxMax(src, W, H, k) {
+  const t = new Uint8Array(W * H), o = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let v = 0;
+    for (let i = -k; i <= k; i++) { const xx = x + i; if (xx >= 0 && xx < W && src[y*W+xx]) { v = 1; break; } }
+    t[y*W+x] = v;
+  }
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let v = 0;
+    for (let i = -k; i <= k; i++) { const yy = y + i; if (yy >= 0 && yy < H && t[yy*W+x]) { v = 1; break; } }
+    o[y*W+x] = v;
+  }
+  return o;
+}
+function boxMin(src, W, H, k) {
+  const t = new Uint8Array(W * H), o = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let v = 1;
+    for (let i = -k; i <= k; i++) { const xx = x + i; if (xx < 0 || xx >= W || !src[y*W+xx]) { v = 0; break; } }
+    t[y*W+x] = v;
+  }
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let v = 1;
+    for (let i = -k; i <= k; i++) { const yy = y + i; if (yy < 0 || yy >= H || !t[yy*W+x]) { v = 0; break; } }
+    o[y*W+x] = v;
+  }
+  return o;
+}
+function fillHoles(m, W, H) {
+  // 바깥 배경을 flood fill 해서, 남은 0을 구멍으로 간주해 1로 채움
+  const vis = new Uint8Array(W * H);
+  const st = new Int32Array(W * H); let sp = 0;
+  const pushIf = p => { if (!m[p] && !vis[p]) { vis[p] = 1; st[sp++] = p; } };
+  for (let x = 0; x < W; x++) { pushIf(x); pushIf((H-1)*W + x); }
+  for (let y = 0; y < H; y++) { pushIf(y*W); pushIf(y*W + W - 1); }
+  while (sp) {
+    const p = st[--sp], x = p % W, y = (p / W) | 0;
+    if (x > 0) pushIf(p - 1);
+    if (x < W - 1) pushIf(p + 1);
+    if (y > 0) pushIf(p - W);
+    if (y < H - 1) pushIf(p + W);
+  }
+  for (let p = 0; p < m.length; p++) if (!m[p] && !vis[p]) m[p] = 1;
+}
+
+/* ══════════ 격자 정렬 ══════════ */
+function gridSnap() {
+  if (!P || P.hotspots.length < 4) { setSb('먼저 자동 인식으로 후보를 만드세요'); return; }
+  const all = P.hotspots;
+  const med = arr => { const a = arr.slice().sort((p, q) => p - q); return a[a.length >> 1]; };
+  const mw0 = med(all.map(h => h.w)), mh0 = med(all.map(h => h.h));
+  // 조각/노이즈 제외: 크기가 중앙값에서 크게 벗어난 박스는 격자 추정에서 뺀다
+  const core = all.filter(h => h.w > mw0 * 0.6 && h.w < mw0 * 1.7 && h.h > mh0 * 0.6 && h.h < mh0 * 1.7);
+  const base = core.length >= 4 ? core : all;
+  const mw = med(base.map(h => h.w)), mh = med(base.map(h => h.h));
+  const cxs = cluster(base.map(h => h.x + h.w / 2).sort((a, b) => a - b), mw * 0.45);
+  const cys = cluster(base.map(h => h.y + h.h / 2).sort((a, b) => a - b), mh * 0.45);
+  if (cxs.length * cys.length > 400) { setSb('격자 추정 실패(칸이 너무 많음). 감도를 조절해 보세요'); return; }
+  snap();
+  const out = [];
+  for (const cy of cys) for (const cx of cxs)
+    out.push(newHot(clamp01(cx - mw / 2), clamp01(cy - mh / 2), mw, mh, 1));
+  P.hotspots = out; selId = null;
+  $('gRow').value = cys.length; $('gCol').value = cxs.length;
+  save(); renderAll();
+  setSb(`격자 ${cys.length}행 × ${cxs.length}열 = ${out.length}칸으로 정렬 (제외된 조각 ${all.length - base.length}개)`);
+}
+function cluster(sorted, tol) {
+  const out = []; let cur = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] - sorted[i-1] <= tol) cur.push(sorted[i]);
+    else { out.push(cur); cur = [sorted[i]]; }
+  }
+  out.push(cur);
+  return out.map(g => g.reduce((a, b) => a + b, 0) / g.length);
+}
+const clamp01 = v => Math.max(0, Math.min(1, v));
+
+/* ══════════ 영역 지정 → 격자 생성 ══════════ */
+function startGridArea() {
+  if (!img) { setSb('이미지 먼저'); return; }
+  gridAreaMode = !gridAreaMode;
+  $('btnGrid').classList.toggle('on', gridAreaMode);
+  setSb(gridAreaMode ? '격자를 채울 영역을 드래그하세요' : '취소됨');
+}
+function makeGridIn(x, y, w, h) {
+  const rows = Math.max(1, +$('gRow').value || 1), cols = Math.max(1, +$('gCol').value || 1);
+  snap();
+  const cw = w / cols, ch = h / rows;
+  const pad = 0.06;   // 셀 안쪽 여백 비율
+  const out = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++)
+    out.push(newHot(x + c*cw + cw*pad, y + r*ch + ch*pad, cw*(1-pad*2), ch*(1-pad*2), 1));
+  P.hotspots = P.hotspots.concat(out);
+  save(); renderAll();
+  setSb(`${rows}×${cols} = ${out.length}칸 생성`);
+}
+
+/* ══════════ 렌더 ══════════ */
+function renderAll() {
+  const has = !!(P && img);
+  $('stage').style.display = has ? 'inline-block' : 'none';
+  $('emptyBox').style.display = has ? 'none' : 'block';
+  $('btnQty').classList.toggle('on', !!(P && P.showQty));
+  renderHotspots(); renderList();
+}
+function renderHotspots() {
+  const L = $('layer'); if (!P) { L.innerHTML = ''; return; }
+  L.innerHTML = P.hotspots.map(h => {
+    const done = h.qty <= 0;
+    return `<div class="hs${done ? ' done' : ''}${h.id === selId ? ' sel' : ''}" data-id="${h.id}"
+      style="left:${h.x*100}%;top:${h.y*100}%;width:${h.w*100}%;height:${h.h*100}%">
+      ${(P.showQty && !done) ? `<span class="qty">+${h.qty}</span>` : ''}
+      <div class="hd nw" data-r="nw"></div><div class="hd ne" data-r="ne"></div>
+      <div class="hd sw" data-r="sw"></div><div class="hd se" data-r="se"></div>
+    </div>`;
+  }).join('');
+}
+function renderList() {
+  const el = $('hlist'); if (!P) { el.innerHTML = ''; $('sfoot').textContent = '-'; return; }
+  el.innerHTML = P.hotspots.map((h, i) => {
+    const done = h.qty <= 0;
+    return `<div class="hrow${done ? ' done' : ''}${h.id === selId ? ' on' : ''}" onclick="pick('${h.id}')">
+      <span class="nm">${esc(h.name || ('품목 ' + (i + 1)))}</span>
+      <span class="q">${done ? '완료' : '+' + h.qty}</span>
+    </div>`;
+  }).join('');
+  const left = P.hotspots.filter(h => h.qty > 0).length;
+  const sum = P.hotspots.reduce((a, h) => a + Math.max(0, h.qty), 0);
+  $('sfoot').textContent = `전체 ${P.hotspots.length} · 남음 ${left} (수량 ${sum})`;
+}
+function pick(id) { selId = id; renderAll(); }
+
+/* ══════════ 모드 ══════════ */
+function setMode(m) {
+  mode = m;
+  $('mEdit').classList.toggle('on', m === 'edit');
+  $('mRun').classList.toggle('on', m === 'run');
+  $('editTools').style.display = m === 'edit' ? 'flex' : 'none';
+  document.body.classList.toggle('mode-run', m === 'run');
+  gridAreaMode = false; $('btnGrid').classList.remove('on');
+  selId = null; renderAll();
+  setSb(m === 'edit' ? '편집 모드 — 드래그로 영역 생성/이동' : '운영 모드 — 클릭 = 1개 차감, Shift+클릭(또는 길게 누르기) = 복구');
+}
+
+/* ══════════ 포인터 조작 ══════════ */
+const layer = $('layer');
+let drag = null;
+let lpTimer = null, lpFired = false;
+
+function stageRect() { return $('baseImg').getBoundingClientRect(); }
+function toN(e) {
+  const r = stageRect();
+  return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+}
+
+layer.addEventListener('pointerdown', e => {
+  if (!P || !img) return;
+  const hsEl = e.target.closest('.hs');
+  const p = toN(e);
+
+  if (mode === 'run') {
+    if (!hsEl) return;
+    const h = P.hotspots.find(x => x.id === hsEl.dataset.id); if (!h) return;
+    lpFired = false;
+    lpTimer = setTimeout(() => { lpFired = true; snap(); h.qty++; h.max = Math.max(h.max, h.qty); save(); renderAll(); setSb(`복구 → +${h.qty}`); }, 550);
+    return;
+  }
+
+  // 편집 모드
+  layer.setPointerCapture(e.pointerId);
+  if (gridAreaMode) { drag = { type: 'grid', sx: p.x, sy: p.y, cx: p.x, cy: p.y }; showRubber(drag); return; }
+
+  const hd = e.target.closest('.hd');
+  if (hd && hsEl) {
+    const h = P.hotspots.find(x => x.id === hsEl.dataset.id);
+    selId = h.id; snap();
+    drag = { type: 'resize', h, corner: hd.dataset.r, ox: p.x, oy: p.y, o: { ...h } };
+    renderHotspots(); return;
+  }
+  if (hsEl) {
+    const h = P.hotspots.find(x => x.id === hsEl.dataset.id);
+    selId = h.id; snap();
+    drag = { type: 'move', h, ox: p.x, oy: p.y, o: { ...h }, moved: false };
+    renderAll(); return;
+  }
+  selId = null; renderAll();
+  drag = { type: 'new', sx: p.x, sy: p.y, cx: p.x, cy: p.y };
+  showRubber(drag);
+});
+
+layer.addEventListener('pointermove', e => {
+  if (mode === 'run') { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } return; }
+  if (!drag) return;
+  const p = toN(e);
+  if (drag.type === 'new' || drag.type === 'grid') { drag.cx = p.x; drag.cy = p.y; showRubber(drag); return; }
+  const dx = p.x - drag.ox, dy = p.y - drag.oy;
+  const h = drag.h, o = drag.o;
+  if (drag.type === 'move') {
+    if (Math.abs(dx) > 0.002 || Math.abs(dy) > 0.002) drag.moved = true;
+    h.x = clamp01(o.x + dx); h.y = clamp01(o.y + dy);
+  } else {
+    let x = o.x, y = o.y, w = o.w, hh = o.h;
+    if (drag.corner.includes('w')) { x = o.x + dx; w = o.w - dx; }
+    if (drag.corner.includes('e')) { w = o.w + dx; }
+    if (drag.corner.includes('n')) { y = o.y + dy; hh = o.h - dy; }
+    if (drag.corner.includes('s')) { hh = o.h + dy; }
+    if (w > 0.004) { h.x = clamp01(x); h.w = w; }
+    if (hh > 0.004) { h.y = clamp01(y); h.h = hh; }
+  }
+  renderHotspots();
+});
+
+layer.addEventListener('pointerup', e => {
+  if (mode === 'run') {
+    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+    if (lpFired) { lpFired = false; return; }
+    const hsEl = e.target.closest('.hs'); if (!hsEl) return;
+    const h = P.hotspots.find(x => x.id === hsEl.dataset.id); if (!h) return;
+    snap();
+    if (e.shiftKey || e.ctrlKey) { h.qty++; h.max = Math.max(h.max, h.qty); }
+    else h.qty = Math.max(0, h.qty - 1);
+    save(); renderAll();
+    setSb(h.qty <= 0 ? '완료 처리 (Shift+클릭으로 복구)' : `남은 수량 +${h.qty}`);
+    return;
+  }
+  if (!drag) return;
+  hideRubber();
+  if (drag.type === 'new' || drag.type === 'grid') {
+    const x = Math.min(drag.sx, drag.cx), y = Math.min(drag.sy, drag.cy);
+    const w = Math.abs(drag.cx - drag.sx), h = Math.abs(drag.cy - drag.sy);
+    if (w > 0.01 && h > 0.01) {
+      if (drag.type === 'grid') { makeGridIn(x, y, w, h); gridAreaMode = false; $('btnGrid').classList.remove('on'); }
+      else { snap(); const nh = newHot(x, y, w, h, 1); P.hotspots.push(nh); selId = nh.id; save(); renderAll(); }
+    }
+  } else { save(); renderAll(); }
+  drag = null;
+});
+layer.addEventListener('pointercancel', () => { hideRubber(); drag = null; if (lpTimer) clearTimeout(lpTimer); });
+layer.addEventListener('contextmenu', e => {
+  if (mode !== 'run') return;
+  const hsEl = e.target.closest('.hs'); if (!hsEl) return;
+  e.preventDefault();
+  const h = P.hotspots.find(x => x.id === hsEl.dataset.id);
+  snap(); h.qty++; h.max = Math.max(h.max, h.qty); save(); renderAll();
+});
+
+function showRubber(d) {
+  const r = $('rubber'), br = stageRect(), st = $('stage').getBoundingClientRect();
+  const x = Math.min(d.sx, d.cx), y = Math.min(d.sy, d.cy);
+  const w = Math.abs(d.cx - d.sx), h = Math.abs(d.cy - d.sy);
+  r.style.display = 'block';
+  r.style.left = (br.left - st.left + x * br.width) + 'px';
+  r.style.top = (br.top - st.top + y * br.height) + 'px';
+  r.style.width = (w * br.width) + 'px';
+  r.style.height = (h * br.height) + 'px';
+}
+function hideRubber() { $('rubber').style.display = 'none'; }
+
+/* ══════════ 키보드 ══════════ */
+document.addEventListener('keydown', e => {
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+  if (!P) return;
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selId && mode === 'edit') {
+    e.preventDefault(); snap();
+    P.hotspots = P.hotspots.filter(h => h.id !== selId); selId = null; save(); renderAll();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && selId && mode === 'edit') {
+    e.preventDefault(); snap();
+    const s = P.hotspots.find(h => h.id === selId); if (!s) return;
+    const n = newHot(clamp01(s.x + s.w * 1.05), s.y, s.w, s.h, s.qty);
+    P.hotspots.push(n); selId = n.id; save(); renderAll();
+  }
+});
+
+/* ══════════ 입력: 파일 / 붙여넣기 / 드롭 ══════════ */
+$('imgIn').addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); e.target.value = ''; });
+document.addEventListener('paste', e => {
+  const it = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+  if (it) handleFile(it.getAsFile());
+});
+['dragenter', 'dragover'].forEach(t => document.addEventListener(t, e => {
+  e.preventDefault(); $('drop')?.classList.add('over');
+}));
+['dragleave', 'drop'].forEach(t => document.addEventListener(t, e => {
+  e.preventDefault(); $('drop')?.classList.remove('over');
+}));
+document.addEventListener('drop', e => { const f = e.dataTransfer?.files?.[0]; if (f) handleFile(f); });
+
+/* ══════════ 내보내기 ══════════ */
+function exportPNG() {
+  if (!P || !img) { setSb('이미지 없음'); return; }
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const x = c.getContext('2d');
+  x.drawImage(img, 0, 0);
+  for (const h of P.hotspots) {
+    const px = h.x * c.width, py = h.y * c.height, pw = h.w * c.width, ph = h.h * c.height;
+    if (h.qty <= 0) {
+      x.fillStyle = 'rgba(255,255,255,0.90)';
+      x.fillRect(px, py, pw, ph);
+      x.strokeStyle = 'rgba(190,190,190,0.85)'; x.lineWidth = Math.max(1, c.width / 900);
+      x.strokeRect(px, py, pw, ph);
+    } else if (P.showQty) {
+      const fs = Math.max(13, Math.min(pw, ph) * 0.30);
+      x.font = `800 ${fs}px system-ui,'Noto Sans KR',sans-serif`;
+      const t = '+' + h.qty;
+      const tw = x.measureText(t).width, pad = fs * 0.22;
+      const bx = px + pw - tw - pad * 2, by = py;
+      x.fillStyle = '#e02020';
+      x.fillRect(bx, by, tw + pad * 2, fs + pad);
+      x.fillStyle = '#fff'; x.textBaseline = 'top';
+      x.fillText(t, bx + pad, by + pad * 0.4);
+    }
+  }
+  const a = document.createElement('a');
+  a.download = (P.name || '공구').replace(/[^\w가-힣\s-]/g, '').trim().replace(/\s+/g, '_') + '_잔여.png';
+  a.href = c.toDataURL('image/png');
+  a.click();
+  setSb('PNG 저장 완료 ✓');
+}
+async function exportJSON() {
+  if (!P) return;
+  const blob = await idbGet(P.id);
+  const dataURL = blob ? await new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(blob); }) : null;
+  const out = { app: 'fgogoods', version: 1, project: P, image: dataURL };
+  const a = document.createElement('a');
+  a.download = (P.name || '공구').replace(/\s+/g, '_') + '.json';
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(out)], { type: 'application/json' }));
+  a.click();
+  setSb('백업 저장 완료');
+}
+$('jsonIn').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const o = JSON.parse(await f.text());
+    if (o.app !== 'fgogoods') throw new Error('형식이 다릅니다');
+    const id = 'g' + Date.now().toString(36);
+    P = Object.assign({}, o.project, { id });
+    const ix = loadIndex(); ix.unshift({ id, name: P.name, updatedAt: Date.now() }); saveIndex(ix);
+    if (o.image) {
+      const blob = await (await fetch(o.image)).blob();
+      await setImageFromBlob(blob);
+    } else img = null;
+    undoStack = []; selId = null; save(); renderProjSel(); renderAll();
+    setSb('백업 불러오기 완료');
+  } catch (err) { setSb('불러오기 실패: ' + err.message); }
+});
+
+/* ══════════ 시작 ══════════ */
+(async function init() {
+  renderProjSel();
+  const ix = loadIndex();
+  if (ix.length) await openProject(ix[0].id);
+  else setSb('[+ 새 공구]로 시작하세요');
+  if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
+})();
+</script>
+</body>
+</html>
