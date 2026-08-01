@@ -4,6 +4,15 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>소분을 하자</title>
+<meta name="description" content="공구 소분 잔여 표시 도구. 굿즈 이미지에 화이트 처리와 +숫자 표식을 올려 남은 자리를 한눈에."/>
+<meta property="og:type" content="website"/>
+<meta property="og:site_name" content="소분을 하자"/>
+<meta property="og:title" content="소분을 하자"/>
+<meta property="og:description" content="굿즈 이미지에 화이트 처리와 +숫자 표식을 올려 남은 자리를 한눈에."/>
+<meta property="og:url" content="https://ryuri-r.github.io/fgo-table-maker/goods.html"/>
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="소분을 하자"/>
+<meta name="twitter:description" content="굿즈 이미지에 화이트 처리와 +숫자 표식을 올려 남은 자리를 한눈에."/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -117,6 +126,13 @@ body.placing #layer{cursor:copy}
       </ul>
       <b>공통</b>
       <ul><li><b>Ctrl+Z</b> 되돌리기 · <b>Esc</b> 선택 해제</li></ul>
+      <b>저장</b>
+      <ul>
+        <li>데이터는 <b>서버가 아니라 이 브라우저(로컬)에만</b> 저장됩니다</li>
+        <li>다른 기기·브라우저에서는 보이지 않고, 브라우저의 <b>사이트 데이터를 지우면 사라집니다</b></li>
+        <li>중요하면 <b>⋯ → 백업 저장</b>으로 파일을 받아두세요</li>
+        <li>지우기: <b>⋯ → 이 공구 삭제</b> / <b>전체 데이터 삭제</b></li>
+      </ul>
     </div>
   </span>
   <span style="margin-left:auto"></span>
@@ -130,7 +146,9 @@ body.placing #layer{cursor:copy}
     <button onclick="closeMenu();document.getElementById('jsonIn').click()">백업 불러오기</button>
     <hr/>
     <button onclick="closeMenu();location.href='index.html'">테이블 메이커 →</button>
+    <hr/>
     <button class="dl" onclick="closeMenu();deleteProject()">이 공구 삭제</button>
+    <button class="dl" onclick="closeMenu();wipeAll()">전체 데이터 삭제</button>
   </div>
 </div>
 
@@ -253,6 +271,24 @@ async function deleteProject() {
   const ix = loadIndex(); renderProjSel();
   if (ix.length) openProject(ix[0].id); else { renderAll(); setSb('공구 없음'); }
 }
+/* 이 브라우저에 저장된 공구 데이터 전부 삭제 */
+async function wipeAll() {
+  const ix = loadIndex();
+  if (!confirm(`이 브라우저에 저장된 공구 ${ix.length}개와 이미지를 모두 삭제합니다.\n되돌릴 수 없습니다. 계속할까요?`)) return;
+  if (!confirm('정말 전부 삭제할까요? 필요하면 먼저 [백업 저장]을 하세요.')) return;
+  Object.keys(localStorage).filter(k => k.startsWith('fgogoods')).forEach(k => localStorage.removeItem(k));
+  try {
+    await new Promise(res => {
+      const r = indexedDB.deleteDatabase('fgogoods');
+      r.onsuccess = r.onerror = r.onblocked = res;
+    });
+  } catch {}
+  P = null; img = null; undoStack = []; selMask = selMark = null;
+  renderProjSel(); renderAll();
+  setSb('전체 삭제 완료 · [+ 새 공구]로 다시 시작하세요');
+  setTimeout(() => location.reload(), 400);
+}
+
 async function openProject(id) {
   if (!id) return;
   let d; try { d = JSON.parse(localStorage.getItem(LS_P(id))); } catch { d = null; }
