@@ -120,8 +120,10 @@ body{
   <span id="editTools" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
     <button class="btn" onclick="autoDetect()">자동 인식</button>
     <span class="lbl">감도</span>
-    <input class="num" id="thr" type="number" value="70" min="10" max="200" step="5" style="width:56px"/>
+    <input class="num" id="thr" type="number" value="40" min="10" max="200" step="5" style="width:56px"/>
+    <button class="btn" id="btnWm" onclick="toggleWm()" title="SAMPLE 같은 얇은 워터마크 선을 무시합니다">워터마크 무시</button>
     <button class="btn" onclick="gridSnap()">격자 정렬</button>
+    <button class="btn" onclick="unifySize()" title="모든 영역을 같은 크기로">크기 통일</button>
     <div class="sep"></div>
     <span class="lbl">행</span><input class="num" id="gRow" type="number" value="4" min="1" max="30"/>
     <span class="lbl">열</span><input class="num" id="gCol" type="number" value="6" min="1" max="30"/>
@@ -185,6 +187,7 @@ let selId = null;
 let undoStack = [];
 let gridAreaMode = false;
 let hotCnt = 0;
+let wmIgnore = false;   // 워터마크(얇은 선) 무시 모드
 
 const $ = id => document.getElementById(id);
 const setSb = t => $('sb').textContent = t;
@@ -357,6 +360,13 @@ function clearHotspots() {
 function toggleQty() { if (!P) return; P.showQty = !P.showQty; save(); renderAll(); }
 
 /* ══════════ 자동 인식 ══════════ */
+function toggleWm() {
+  wmIgnore = !wmIgnore;
+  $('btnWm').classList.toggle('on', wmIgnore);
+  $('thr').value = wmIgnore ? 45 : 40;
+  setSb(wmIgnore ? 'SAMPLE 등 얇은 워터마크를 무시합니다. [자동 인식]을 다시 누르세요' : '워터마크 무시 해제');
+}
+
 function autoDetect() {
   if (!img) { setSb('이미지 먼저'); return; }
   setSb('인식 중…');
@@ -365,7 +375,7 @@ function autoDetect() {
     const boxes = detectBoxes(img, T);
     if (!boxes.length) { setSb('아무것도 못 찾음. 감도를 낮춰보세요'); return; }
     snap();
-    P.hotspots = boxes.map(b => newHot(b.x, b.y, b.w, b.h, 1));
+    P.hotspots = boxes.map(b => newHot(b.x, b.y, b.w, b.h, 0));
     selId = null; save(); renderAll();
     setSb(`${boxes.length}개 인식. 격자형이면 [격자 정렬]을 누르세요`);
   }, 20);
@@ -395,6 +405,8 @@ function detectBoxes(image, T) {
     const dv = Math.max(Math.abs(d[i] - BR), Math.abs(d[i+1] - BG), Math.abs(d[i+2] - BB));
     m[p] = dv > T ? 1 : 0;
   }
+  // 워터마크(SAMPLE 같은 얇은 선) 제거 = 열림 연산. 얇은 획은 사라지고 덩어리는 남는다
+  if (wmIgnore) { m = boxMin(m, W, H, 3); m = boxMax(m, W, H, 3); }
   const K = 3;                       // 닫힘 연산 반경
   m = boxMax(m, W, H, K);            // 팽창
   m = boxMin(m, W, H, K);            // 침식
@@ -426,8 +438,49 @@ function detectBoxes(image, T) {
     if (w > W * 0.97 && h > H * 0.97) continue;
     boxes.push({ x: x0 / W, y: y0 / H, w: w / W, h: h / H });
   }
-  boxes.sort((a, b) => (a.y - b.y) || (a.x - b.x));
-  return boxes;
+  return refineBoxes(boxes);
+}
+
+/* 겹친 박스 정리 + 크기 이상치 제거 */
+function refineBoxes(boxes) {
+  // 1) 중복/포함 제거 — 큰 것부터 남기고, 작은 쪽 면적 기준 35% 이상 겹치면 버림
+  const ov = (a, b) => {
+    const ix = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+    const iy = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+    return (ix * iy) / Math.min(a.w * a.h, b.w * b.h);
+  };
+  const sorted = boxes.slice().sort((a, b) => b.w * b.h - a.w * a.h);
+  const keep = [];
+  for (const b of sorted) if (!keep.some(k => ov(b, k) > 0.35)) keep.push(b);
+
+  // 2) 크기가 고르게 나온 경우에만 이상치 제거 (뱃지+클리어파일처럼 원래 제각각이면 건너뜀)
+  if (keep.length >= 6) {
+    const ar = keep.map(b => b.w * b.h).sort((a, b) => a - b);
+    const q = p => ar[Math.min(ar.length - 1, Math.floor(ar.length * p))];
+    const spread = q(0.8) / Math.max(1e-9, q(0.2));
+    if (spread < 3) {
+      const med = a => { const s = a.slice().sort((p, q2) => p - q2); return s[s.length >> 1]; };
+      const mw = med(keep.map(b => b.w)), mh = med(keep.map(b => b.h));
+      const f = keep.filter(b => b.w > mw * 0.5 && b.w < mw * 1.9 && b.h > mh * 0.5 && b.h < mh * 1.9);
+      if (f.length >= keep.length * 0.5) keep.length = 0, keep.push(...f);
+    }
+  }
+  keep.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+  return keep;
+}
+
+/* 크기 통일 — 중심은 두고 전부 중앙값 크기로 */
+function unifySize() {
+  if (!P || P.hotspots.length < 2) return;
+  const med = a => { const s = a.slice().sort((p, q) => p - q); return s[s.length >> 1]; };
+  const mw = med(P.hotspots.map(h => h.w)), mh = med(P.hotspots.map(h => h.h));
+  snap();
+  P.hotspots.forEach(h => {
+    const cx = h.x + h.w / 2, cy = h.y + h.h / 2;
+    h.w = mw; h.h = mh; h.x = clamp01(cx - mw / 2); h.y = clamp01(cy - mh / 2);
+  });
+  save(); renderAll();
+  setSb(`크기 통일 (${(mw * 100).toFixed(1)}% × ${(mh * 100).toFixed(1)}%)`);
 }
 function boxMax(src, W, H, k) {
   const t = new Uint8Array(W * H), o = new Uint8Array(W * H);
@@ -488,22 +541,28 @@ function gridSnap() {
   const cys = cluster(base.map(h => h.y + h.h / 2).sort((a, b) => a - b), mh * 0.45);
   if (cxs.length * cys.length > 400) { setSb('격자 추정 실패(칸이 너무 많음). 감도를 조절해 보세요'); return; }
   snap();
+  // 흰 테두리까지 덮이도록 살짝 키움
+  const gw = mw * 1.10, gh = mh * 1.10;
   const out = [];
   for (const cy of cys) for (const cx of cxs)
-    out.push(newHot(clamp01(cx - mw / 2), clamp01(cy - mh / 2), mw, mh, 1));
+    out.push(newHot(clamp01(cx - gw / 2), clamp01(cy - gh / 2), gw, gh, 0));
   P.hotspots = out; selId = null;
   $('gRow').value = cys.length; $('gCol').value = cxs.length;
   save(); renderAll();
   setSb(`격자 ${cys.length}행 × ${cxs.length}열 = ${out.length}칸으로 정렬 (제외된 조각 ${all.length - base.length}개)`);
 }
 function cluster(sorted, tol) {
-  const out = []; let cur = [sorted[0]];
+  const groups = []; let cur = [sorted[0]];
   for (let i = 1; i < sorted.length; i++) {
     if (sorted[i] - sorted[i-1] <= tol) cur.push(sorted[i]);
-    else { out.push(cur); cur = [sorted[i]]; }
+    else { groups.push(cur); cur = [sorted[i]]; }
   }
-  out.push(cur);
-  return out.map(g => g.reduce((a, b) => a + b, 0) / g.length);
+  groups.push(cur);
+  // 구성원이 너무 적은 줄은 노이즈로 보고 버림 (모서리 로고·안내문 등)
+  const maxN = Math.max(...groups.map(g => g.length));
+  const kept = groups.filter(g => g.length >= Math.max(2, maxN * 0.3));
+  const use = kept.length ? kept : groups;
+  return use.map(g => g.reduce((a, b) => a + b, 0) / g.length);
 }
 const clamp01 = v => Math.max(0, Math.min(1, v));
 
@@ -521,7 +580,7 @@ function makeGridIn(x, y, w, h) {
   const pad = 0.06;   // 셀 안쪽 여백 비율
   const out = [];
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++)
-    out.push(newHot(x + c*cw + cw*pad, y + r*ch + ch*pad, cw*(1-pad*2), ch*(1-pad*2), 1));
+    out.push(newHot(x + c*cw + cw*pad, y + r*ch + ch*pad, cw*(1-pad*2), ch*(1-pad*2), 0));
   P.hotspots = P.hotspots.concat(out);
   save(); renderAll();
   setSb(`${rows}×${cols} = ${out.length}칸 생성`);
@@ -692,7 +751,7 @@ layer.addEventListener('pointerup', e => {
     const w = Math.abs(drag.cx - drag.sx), h = Math.abs(drag.cy - drag.sy);
     if (w > 0.01 && h > 0.01) {
       if (drag.type === 'grid') { makeGridIn(x, y, w, h); gridAreaMode = false; $('btnGrid').classList.remove('on'); }
-      else { snap(); const nh = newHot(x, y, w, h, 1); P.hotspots.push(nh); selId = nh.id; save(); renderAll(); }
+      else { snap(); const nh = newHot(x, y, w, h, 0); P.hotspots.push(nh); selId = nh.id; save(); renderAll(); }
     }
   } else { save(); renderAll(); }
   drag = null;
@@ -740,7 +799,7 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && selId && mode === 'edit') {
     e.preventDefault(); snap();
     const s = P.hotspots.find(h => h.id === selId); if (!s) return;
-    const n = newHot(clamp01(s.x + s.w * 1.05), s.y, s.w, s.h, s.qty);
+    const n = newHot(clamp01(s.x + s.w * 1.05), s.y, s.w, s.h, s.n);
     P.hotspots.push(n); selId = n.id; save(); renderAll();
   }
 });
