@@ -47,7 +47,16 @@ body{
 body.placing #layer{cursor:copy}
 
 .mask{position:absolute;background:rgba(255,255,255,.92);cursor:pointer}
-.mask:hover{box-shadow:inset 0 0 0 2px rgba(224,80,80,.55)}
+.mask:hover{box-shadow:inset 0 0 0 2px rgba(154,124,46,.45)}
+.mask.sel{outline:2px solid var(--acc);cursor:move;z-index:3}
+.mh{position:absolute;width:11px;height:11px;background:#fff;border:2px solid var(--acc);
+  border-radius:2px;z-index:4;touch-action:none}
+.mh.nw{left:-6px;top:-6px;cursor:nwse-resize}   .mh.ne{right:-6px;top:-6px;cursor:nesw-resize}
+.mh.sw{left:-6px;bottom:-6px;cursor:nesw-resize}.mh.se{right:-6px;bottom:-6px;cursor:nwse-resize}
+.mh.w{left:-6px;top:50%;margin-top:-5.5px;cursor:ew-resize}
+.mh.e{right:-6px;top:50%;margin-top:-5.5px;cursor:ew-resize}
+.mh.n{top:-6px;left:50%;margin-left:-5.5px;cursor:ns-resize}
+.mh.s{bottom:-6px;left:50%;margin-left:-5.5px;cursor:ns-resize}
 .mark{position:absolute;background:#e02020;color:#fff;font-weight:800;
   padding:.08em .3em;border-radius:.16em;font-family:system-ui,sans-serif;
   letter-spacing:-.02em;cursor:move;touch-action:none;white-space:nowrap;
@@ -130,6 +139,7 @@ let P = null, img = null;
 let undoStack = [];
 let placing = false;
 let selMark = null;   // 선택된 숫자 표식 index
+let selMask = null;   // 선택된 흰 박스 index
 
 const $ = id => document.getElementById(id);
 const setSb = t => $('sb').textContent = t;
@@ -252,7 +262,7 @@ async function handleFile(file) {
   const blob = await downscale(file, 2400);
   await setImageFromBlob(blob);
   renderAll();
-  setSb('드래그 = 가리기 · 흰 칸 클릭 = 되살리기 · [+숫자]로 표식');
+  setSb('드래그 = 가리기 · 흰 칸 클릭 = 선택(이동·크기조절) · 더블클릭/Delete = 되살리기');
 }
 function downscale(file, maxSide) {
   return new Promise(res => {
@@ -280,6 +290,7 @@ function undo() {
   if (!undoStack.length) { setSb('되돌릴 게 없습니다'); return; }
   const s = JSON.parse(undoStack.pop());
   P.masks = s.masks; P.marks = s.marks;
+  selMask = selMark = null;
   save(); renderAll(); setSb('되돌림');
 }
 
@@ -292,8 +303,10 @@ function renderAll() {
   const wpx = $('baseImg').clientWidth || 1;
   $('layer').innerHTML =
     P.masks.map((m, i) =>
-      `<div class="mask" data-t="k" data-i="${i}"
-        style="left:${m.x*100}%;top:${m.y*100}%;width:${m.w*100}%;height:${m.h*100}%"></div>`).join('') +
+      `<div class="mask${i === selMask ? ' sel' : ''}" data-t="k" data-i="${i}"
+        style="left:${m.x*100}%;top:${m.y*100}%;width:${m.w*100}%;height:${m.h*100}%">${
+        i === selMask ? ['nw','n','ne','e','se','s','sw','w'].map(r => `<div class="mh ${r}" data-r="${r}"></div>`).join('') : ''
+      }</div>`).join('') +
     P.marks.map((m, i) =>
       `<div class="mark${i === selMark ? ' sel' : ''}" data-t="m" data-i="${i}"
         style="left:${m.x*100}%;top:${m.y*100}%;font-size:${Math.max(9,(P.fs||DEF_FS)*wpx)}px">+${m.n}</div>`).join('');
@@ -330,13 +343,21 @@ layer.addEventListener('pointerdown', e => {
     drag = { type: 'mark', i, sx: e.clientX, sy: e.clientY, o: { ...P.marks[i] }, moved: false };
     return;
   }
-  if (el && el.dataset.t === 'k') {                 // 흰 박스: 클릭 = 삭제
-    drag = { type: 'mask', i: +el.dataset.i, sx: e.clientX, sy: e.clientY, moved: false };
+  if (el && el.dataset.t === 'k') {                 // 흰 박스: 선택 / 이동 / 크기조절
+    const i = +el.dataset.i;
+    if (selMark !== null) { selMark = null; }
+    const hd = e.target.closest('.mh');
+    if (hd && i === selMask) {
+      drag = { type: 'kresize', i, r: hd.dataset.r, sx: e.clientX, sy: e.clientY, o: { ...P.masks[i] }, moved: false };
+      return;
+    }
+    if (selMask !== i) { selMask = i; renderAll(); }
+    drag = { type: 'kmove', i, sx: e.clientX, sy: e.clientY, o: { ...P.masks[i] }, moved: false };
     return;
   }
   if (placing) { drag = { type: 'place', px: p.x, py: p.y }; return; }
 
-  if (selMark !== null) { selMark = null; renderAll(); }   // 빈 곳 클릭 = 선택 해제
+  if (selMark !== null || selMask !== null) { selMark = null; selMask = null; renderAll(); }   // 빈 곳 = 선택 해제
   // 빈 곳: 드래그해야만 새 박스 생성 (클릭만으로는 아무 일도 없음)
   drag = { type: 'draw', sx: e.clientX, sy: e.clientY, nx: p.x, ny: p.y, cx: p.x, cy: p.y, moved: false, touch: e.pointerType === 'touch', armed: e.pointerType !== 'touch' };
   if (drag.touch) lpTimer = setTimeout(() => { if (drag) { drag.armed = true; setSb('영역을 드래그하세요'); } }, 380);
@@ -356,7 +377,23 @@ layer.addEventListener('pointermove', e => {
     P.marks[drag.i].y = clamp01(drag.o.y + dy / r.height);
     renderAll(); return;
   }
-  if (drag.type === 'mask') { if (far) drag.moved = true; return; }
+  if (drag.type === 'kmove' || drag.type === 'kresize') {
+    if (!far) return;
+    if (!drag.moved) snap();
+    drag.moved = true;
+    const r = rectOf(), nx = dx / r.width, ny = dy / r.height, m = P.masks[drag.i], o = drag.o;
+    if (drag.type === 'kmove') { m.x = clamp01(o.x + nx); m.y = clamp01(o.y + ny); }
+    else {
+      let x = o.x, y = o.y, w = o.w, h = o.h;
+      if (drag.r.includes('w')) { x = o.x + nx; w = o.w - nx; }
+      if (drag.r.includes('e')) { w = o.w + nx; }
+      if (drag.r.includes('n')) { y = o.y + ny; h = o.h - ny; }
+      if (drag.r.includes('s')) { h = o.h + ny; }
+      if (w > 0.004) { m.x = clamp01(x); m.w = w; }
+      if (h > 0.004) { m.y = clamp01(y); m.h = h; }
+    }
+    renderAll(); return;
+  }
   if (drag.type === 'draw') {
     if (far) drag.moved = true;
     if (!drag.armed) { if (far && lpTimer) { clearTimeout(lpTimer); lpTimer = null; drag = null; } return; }
@@ -376,8 +413,9 @@ layer.addEventListener('pointerup', e => {
     else { selMark = d.i; renderAll(); setSb('선택됨 · Delete 삭제 · 더블클릭 값 변경'); }
     return;
   }
-  if (d.type === 'mask') {
-    if (!d.moved) { snap(); P.masks.splice(d.i, 1); save(); renderAll(); setSb('되살림'); }
+  if (d.type === 'kmove' || d.type === 'kresize') {
+    if (d.moved) { save(); setSb(d.type === 'kmove' ? '이동' : '크기 변경'); }
+    else setSb('선택됨 · 끌어서 이동 · 모서리로 크기 조절 · 더블클릭/Delete 삭제');
     return;
   }
   if (d.type === 'place') { addMark(d.px, d.py); return; }
@@ -389,7 +427,7 @@ layer.addEventListener('pointerup', e => {
     if (!(d.moved && w > 0.008 && h > 0.008)) { undoStack.pop(); return; }   // 그냥 클릭이면 아무것도 안 함
     P.masks.push({ x, y, w, h });
     P.lastSize = { w, h };
-    setSb('가림 (다시 클릭하면 되살아납니다)');
+    setSb('가림 · 클릭하면 선택(이동·크기조절) · 더블클릭이면 되살리기');
     save(); renderAll();
   }
 });
@@ -442,14 +480,24 @@ const hideRubber = () => $('rubber').style.display = 'none';
 document.addEventListener('keydown', e => {
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
-  if (e.key === 'Escape') { if (placing) endPlace(); if (selMark !== null) { selMark = null; renderAll(); } return; }
-  if ((e.key === 'Delete' || e.key === 'Backspace') && selMark !== null) { e.preventDefault(); deleteMark(selMark); }
+  if (e.key === 'Escape') { if (placing) endPlace(); if (selMark !== null || selMask !== null) { selMark = selMask = null; renderAll(); } return; }
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (selMark !== null) { e.preventDefault(); deleteMark(selMark); }
+    else if (selMask !== null) { e.preventDefault(); deleteMask(selMask); }
+  }
 });
-/* 숫자 더블클릭 = 값 변경 */
+/* 더블클릭: 숫자 = 값 변경 · 흰 박스 = 삭제 */
 layer.addEventListener('dblclick', e => {
-  const el = e.target.closest('[data-t="m"]'); if (!el) return;
-  e.preventDefault(); editMark(+el.dataset.i);
+  const m = e.target.closest('[data-t="m"]');
+  if (m) { e.preventDefault(); editMark(+m.dataset.i); return; }
+  const k = e.target.closest('[data-t="k"]');
+  if (k) { e.preventDefault(); deleteMask(+k.dataset.i); }
 });
+function deleteMask(i) {
+  if (i === null || !P.masks[i]) return;
+  snap(); P.masks.splice(i, 1); selMask = null;
+  save(); renderAll(); setSb('되살림');
+}
 function toggleMenu(e) { e.stopPropagation(); $('menu').classList.toggle('open'); }
 const closeMenu = () => $('menu').classList.remove('open');
 document.addEventListener('click', e => { if (!e.target.closest('.menu') && !e.target.closest('.topbar .btn')) closeMenu(); });
