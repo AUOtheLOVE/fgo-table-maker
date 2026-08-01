@@ -67,15 +67,17 @@ body.placing #layer{cursor:copy}
 
 .mask{position:absolute;background:rgba(255,255,255,.92);cursor:pointer}
 .mask:hover{box-shadow:inset 0 0 0 2px rgba(154,124,46,.45)}
-.mask.sel{outline:2px solid var(--acc);cursor:move;z-index:3}
-.mh{position:absolute;width:11px;height:11px;background:#fff;border:2px solid var(--acc);
-  border-radius:2px;z-index:4;touch-action:none}
-.mh.nw{left:-6px;top:-6px;cursor:nwse-resize}   .mh.ne{right:-6px;top:-6px;cursor:nesw-resize}
-.mh.sw{left:-6px;bottom:-6px;cursor:nesw-resize}.mh.se{right:-6px;bottom:-6px;cursor:nwse-resize}
-.mh.w{left:-6px;top:50%;margin-top:-5.5px;cursor:ew-resize}
-.mh.e{right:-6px;top:50%;margin-top:-5.5px;cursor:ew-resize}
-.mh.n{top:-6px;left:50%;margin-left:-5.5px;cursor:ns-resize}
-.mh.s{bottom:-6px;left:50%;margin-left:-5.5px;cursor:ns-resize}
+.mask.sel{outline:2px solid var(--acc);cursor:move;z-index:10}
+.mh{position:absolute;width:13px;height:13px;background:#fff;border:2px solid var(--acc);
+  border-radius:2px;z-index:11;touch-action:none}
+/* 점 자체는 작게 두고 클릭 판정만 넓힌다 — 살짝 빗나가도 옆 박스가 잡히지 않도록 */
+.mh::after{content:'';position:absolute;inset:-8px}
+.mh.nw{left:-7px;top:-7px;cursor:nwse-resize}   .mh.ne{right:-7px;top:-7px;cursor:nesw-resize}
+.mh.sw{left:-7px;bottom:-7px;cursor:nesw-resize}.mh.se{right:-7px;bottom:-7px;cursor:nwse-resize}
+.mh.w{left:-7px;top:50%;margin-top:-6.5px;cursor:ew-resize}
+.mh.e{right:-7px;top:50%;margin-top:-6.5px;cursor:ew-resize}
+.mh.n{top:-7px;left:50%;margin-left:-6.5px;cursor:ns-resize}
+.mh.s{bottom:-7px;left:50%;margin-left:-6.5px;cursor:ns-resize}
 .mark{position:absolute;background:#e02020;color:#fff;font-weight:800;
   padding:.08em .3em;border-radius:.16em;font-family:system-ui,sans-serif;
   letter-spacing:-.02em;cursor:move;touch-action:none;white-space:nowrap;
