@@ -44,12 +44,14 @@ body{
 #layer{position:absolute;inset:0;touch-action:pan-x pan-y;cursor:crosshair}
 body.placing #layer{cursor:copy}
 
-.mask{position:absolute;background:rgba(255,255,255,.92);border:1px solid rgba(185,185,185,.9);cursor:pointer}
-.mask:hover{background:rgba(255,245,245,.92);border-color:#e07070}
+.mask{position:absolute;background:#fff;cursor:pointer}
+.mask:hover{box-shadow:inset 0 0 0 2px rgba(224,80,80,.55)}
 .mark{position:absolute;background:#e02020;color:#fff;font-weight:800;
   padding:.08em .3em;border-radius:.16em;font-family:system-ui,sans-serif;
   letter-spacing:-.02em;cursor:move;touch-action:none;white-space:nowrap;
-  transform:translate(-50%,-50%);line-height:1.15;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  transform:translate(-50%,-50%);line-height:1.15;box-shadow:0 1px 3px rgba(0,0,0,.25);
+  user-select:none}
+.mark.sel{outline:3px solid var(--acc);outline-offset:2px}
 #rubber{position:absolute;background:rgba(255,255,255,.6);border:2px dashed var(--acc);display:none;pointer-events:none}
 
 .statusbar{background:var(--s1);border-top:1px solid var(--line);padding:6px 14px;font-size:11.5px;color:var(--t2);flex-shrink:0}
@@ -72,6 +74,9 @@ body.placing #layer{cursor:copy}
   <button class="btn" onclick="newProject()">+ 새 공구</button>
   <div class="sep"></div>
   <button class="btn" id="btnMark" onclick="startPlace()">+ 숫자</button>
+  <button class="btn" onclick="scaleMarks(1/1.18)" title="숫자 전체 작게">A−</button>
+  <button class="btn" onclick="scaleMarks(1.18)" title="숫자 전체 크게">A+</button>
+  <div class="sep"></div>
   <button class="btn" onclick="undo()">되돌리기</button>
   <span style="margin-left:auto"></span>
   <button class="btn acc" onclick="exportPNG()">PNG 저장</button>
@@ -116,11 +121,13 @@ body.placing #layer{cursor:copy}
 const LS_IDX = 'fgogoods.index';
 const LS_P = id => 'fgogoods.p.' + id;
 const DEF_SIZE = { w: 0.09, h: 0.16 };
+const DEF_FS = 0.026;
 const CLICK_PX = 6;
 
 let P = null, img = null;
 let undoStack = [];
 let placing = false;
+let selMark = null;   // 선택된 숫자 표식 index
 
 const $ = id => document.getElementById(id);
 const setSb = t => $('sb').textContent = t;
@@ -155,24 +162,28 @@ function renderProjSel() {
     : '<option value="">(공구 없음)</option>';
 }
 function blankProject(id, name) {
-  return { version: 2, id, name, imgW: 0, imgH: 0, masks: [], marks: [], lastSize: { ...DEF_SIZE } };
+  return { version: 2, id, name, imgW: 0, imgH: 0, masks: [], marks: [], lastSize: { ...DEF_SIZE }, fs: DEF_FS };
 }
 /* 구버전(hotspots) → 새 구조 이관 */
 function migrate(p) {
   if (!p) return p;
-  if (p.version === 2 && p.masks) return p;
+  if (p.version === 2 && p.masks) {
+    if (!p.fs) p.fs = (p.marks && p.marks[0] && p.marks[0].fs) || DEF_FS;
+    return p;
+  }
   const hs = p.hotspots || [];
   const masks = [], marks = [];
   for (const h of hs) {
     const done = h.done !== undefined ? h.done : (h.qty !== undefined ? h.qty <= 0 : false);
     const n = h.n || 0;
     if (done) masks.push({ x: h.x, y: h.y, w: h.w, h: h.h });
-    else if (n > 0) marks.push({ x: clamp01(h.x + h.w), y: clamp01(h.y), n, fs: 0.026 });
+    else if (n > 0) marks.push({ x: clamp01(h.x + h.w), y: clamp01(h.y), n });
   }
   const sizes = hs.filter(h => h.w && h.h);
   const med = a => { const s = a.slice().sort((x, y) => x - y); return s[s.length >> 1]; };
   const lastSize = sizes.length ? { w: med(sizes.map(h => h.w)), h: med(sizes.map(h => h.h)) } : { ...DEF_SIZE };
-  return { version: 2, id: p.id, name: p.name, imgW: p.imgW || 0, imgH: p.imgH || 0, masks, marks, lastSize };
+  const fs = (p.marks && p.marks[0] && p.marks[0].fs) || p.fs || DEF_FS;
+  return { version: 2, id: p.id, name: p.name, imgW: p.imgW || 0, imgH: p.imgH || 0, masks, marks, lastSize, fs };
 }
 function newProject() {
   const name = prompt('공구 이름', '공구 ' + new Date().toISOString().slice(5, 10));
@@ -239,7 +250,7 @@ async function handleFile(file) {
   const blob = await downscale(file, 2400);
   await setImageFromBlob(blob);
   renderAll();
-  setSb('드래그해서 가리기 · 흰 칸을 클릭하면 되살아납니다');
+  setSb('드래그 = 가리기 · 흰 칸 클릭 = 되살리기 · [+숫자]로 표식');
 }
 function downscale(file, maxSide) {
   return new Promise(res => {
@@ -282,8 +293,8 @@ function renderAll() {
       `<div class="mask" data-t="k" data-i="${i}"
         style="left:${m.x*100}%;top:${m.y*100}%;width:${m.w*100}%;height:${m.h*100}%"></div>`).join('') +
     P.marks.map((m, i) =>
-      `<div class="mark" data-t="m" data-i="${i}"
-        style="left:${m.x*100}%;top:${m.y*100}%;font-size:${Math.max(10,(m.fs||0.026)*wpx)}px">+${m.n}</div>`).join('');
+      `<div class="mark${i === selMark ? ' sel' : ''}" data-t="m" data-i="${i}"
+        style="left:${m.x*100}%;top:${m.y*100}%;font-size:${Math.max(9,(P.fs||DEF_FS)*wpx)}px">+${m.n}</div>`).join('');
 }
 window.addEventListener('resize', () => { if (P && img) renderAll(); });
 
@@ -323,7 +334,8 @@ layer.addEventListener('pointerdown', e => {
   }
   if (placing) { drag = { type: 'place', px: p.x, py: p.y }; return; }
 
-  // 빈 곳: 짧으면 도장, 끌면 새 박스
+  if (selMark !== null) { selMark = null; renderAll(); }   // 빈 곳 클릭 = 선택 해제
+  // 빈 곳: 드래그해야만 새 박스 생성 (클릭만으로는 아무 일도 없음)
   drag = { type: 'draw', sx: e.clientX, sy: e.clientY, nx: p.x, ny: p.y, cx: p.x, cy: p.y, moved: false, touch: e.pointerType === 'touch', armed: e.pointerType !== 'touch' };
   if (drag.touch) lpTimer = setTimeout(() => { if (drag) { drag.armed = true; setSb('영역을 드래그하세요'); } }, 380);
 });
@@ -359,7 +371,7 @@ layer.addEventListener('pointerup', e => {
 
   if (d.type === 'mark') {
     if (d.moved) { save(); setSb('숫자 이동'); }
-    else editMark(d.i);
+    else { selMark = d.i; renderAll(); setSb('선택됨 · Delete 삭제 · 더블클릭 값 변경'); }
     return;
   }
   if (d.type === 'mask') {
@@ -372,15 +384,10 @@ layer.addEventListener('pointerup', e => {
     const x = Math.min(d.nx, d.cx), y = Math.min(d.ny, d.cy);
     const w = Math.abs(d.cx - d.nx), h = Math.abs(d.cy - d.ny);
     snap();
-    if (d.moved && w > 0.008 && h > 0.008) {          // 드래그 → 그 크기로
-      P.masks.push({ x, y, w, h });
-      P.lastSize = { w, h };
-      setSb('가림 (다시 클릭하면 되살아납니다)');
-    } else {                                          // 클릭 → 마지막 크기로 도장
-      const s = P.lastSize || DEF_SIZE;
-      P.masks.push({ x: clamp01(d.nx - s.w / 2), y: clamp01(d.ny - s.h / 2), w: s.w, h: s.h });
-      setSb('같은 크기로 가림');
-    }
+    if (!(d.moved && w > 0.008 && h > 0.008)) { undoStack.pop(); return; }   // 그냥 클릭이면 아무것도 안 함
+    P.masks.push({ x, y, w, h });
+    P.lastSize = { w, h };
+    setSb('가림 (다시 클릭하면 되살아납니다)');
     save(); renderAll();
   }
 });
@@ -392,18 +399,30 @@ function addMark(x, y) {
   if (v === null) return;
   const n = Math.max(0, Math.min(99, parseInt(v, 10) || 0));
   if (!n) return;
-  snap(); P.marks.push({ x, y, n, fs: 0.026 });
+  snap(); P.marks.push({ x, y, n }); selMark = P.marks.length - 1;
   save(); renderAll(); setSb(`+${n} 추가 · 끌어서 위치 조정`);
 }
 function editMark(i) {
-  const m = P.marks[i];
+  const m = P.marks[i]; if (!m) return;
   const v = prompt('숫자 (0 또는 빈칸이면 삭제)', m.n);
   if (v === null) return;
   const n = Math.max(0, Math.min(99, parseInt(v, 10) || 0));
   snap();
-  if (!n) { P.marks.splice(i, 1); setSb('숫자 삭제'); }
+  if (!n) { P.marks.splice(i, 1); selMark = null; setSb('숫자 삭제'); }
   else { m.n = n; setSb(`+${n}`); }
   save(); renderAll();
+}
+function deleteMark(i) {
+  if (i === null || !P.marks[i]) return;
+  snap(); P.marks.splice(i, 1); selMark = null;
+  save(); renderAll(); setSb('숫자 삭제');
+}
+/* 숫자 전체 크기 조절 */
+function scaleMarks(f) {
+  if (!P) return;
+  P.fs = Math.max(0.008, Math.min(0.2, (P.fs || DEF_FS) * f));
+  save(); renderAll();
+  setSb('숫자 크기 ' + Math.round(P.fs * 1000) / 10 + '%');
 }
 
 function showRubber(x0, y0, x1, y1) {
@@ -420,8 +439,14 @@ const hideRubber = () => $('rubber').style.display = 'none';
 /* ══════════ 키보드 / 메뉴 ══════════ */
 document.addEventListener('keydown', e => {
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
-  if (e.key === 'Escape' && placing) endPlace();
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+  if (e.key === 'Escape') { if (placing) endPlace(); if (selMark !== null) { selMark = null; renderAll(); } return; }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selMark !== null) { e.preventDefault(); deleteMark(selMark); }
+});
+/* 숫자 더블클릭 = 값 변경 */
+layer.addEventListener('dblclick', e => {
+  const el = e.target.closest('[data-t="m"]'); if (!el) return;
+  e.preventDefault(); editMark(+el.dataset.i);
 });
 function toggleMenu(e) { e.stopPropagation(); $('menu').classList.toggle('open'); }
 const closeMenu = () => $('menu').classList.remove('open');
@@ -444,14 +469,11 @@ function exportPNG() {
   c.width = img.naturalWidth; c.height = img.naturalHeight;
   const x = c.getContext('2d');
   x.drawImage(img, 0, 0);
-  for (const m of P.masks) {
-    x.fillStyle = 'rgba(255,255,255,0.94)';
+  x.fillStyle = '#ffffff';
+  for (const m of P.masks)
     x.fillRect(m.x * c.width, m.y * c.height, m.w * c.width, m.h * c.height);
-    x.strokeStyle = 'rgba(195,195,195,0.85)'; x.lineWidth = Math.max(1, c.width / 1000);
-    x.strokeRect(m.x * c.width, m.y * c.height, m.w * c.width, m.h * c.height);
-  }
   for (const m of P.marks) {
-    const fs = Math.max(12, (m.fs || 0.026) * c.width);
+    const fs = Math.max(10, (P.fs || DEF_FS) * c.width);
     x.font = `800 ${fs}px system-ui,'Noto Sans KR',sans-serif`;
     const t = '+' + m.n, tw = x.measureText(t).width, pad = fs * 0.3;
     const bw = tw + pad * 2, bh = fs * 1.15 + pad * 0.5;
