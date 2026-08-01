@@ -276,6 +276,18 @@ body{
 .tpl-tier .ric{width:56px;height:56px;border-radius:0;border:none;background:transparent}
 .tpl-tier .ric img{width:56px;height:56px;object-fit:cover}
 
+/* ── 11주년 교환표 (티어표 위에 덧씌움) ── */
+.tpl-a11 .rlabel{width:var(--rlw,142px);padding:8px 5px}
+.tpl-a11 .ltxt{
+  font-size:15px;line-height:1.45;height:auto;min-height:74px;
+  white-space:pre-line;font-weight:800;letter-spacing:-.01em;
+  overflow:hidden;resize:none;
+}
+.tpl-a11 .ritems{gap:2px;padding:2px;min-height:0;align-content:flex-start}
+.tpl-a11 .ric{width:112px;height:112px}
+.tpl-a11 .ric img{width:112px;height:112px;object-fit:cover;border-radius:0}
+.tpl-a11 .rdel{width:18px;height:18px;font-size:12px}
+
 /* ── 모달 ── */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center}
 .modal-bg.open{display:flex}
@@ -505,44 +517,58 @@ let server = 'KR';
 let data = { mat:[], svt:[], evt:[], a11:[] };
 
 /* ══ 11주년(FGOフェス2026) 기념 예장 대상 서번트 ══
-   이미지: assets/11th/*.webp (appmedia 공개 일러스트에서 얼굴 크롭)
-   공개분 34/48기 — 추가 공개 시 아래 배열에 { f, n } 한 줄 추가 */
+   이미지: assets/11th/*.webp (영령학장 예장 일러스트 얼굴 크롭)
+   전체 48기 (사전 공개 34 + 미발표 14) — 가나다순 */
 const A11_BASE_ID = 9110000;
 const A11_LIST = [
-  { f:'nemo',        n:'네모' },
-  { f:'demeter',     n:'데메테르' },
-  { f:'percival',    n:'퍼시빌' },
-  { f:'hanasaki',    n:'하나사키오키나' },
-  { f:'unknown0703', n:'레이디 아발론' },
-  { f:'britomart',   n:'브리토마트' },
-  { f:'gilgamesh',   n:'길가메쉬' },
-  { f:'asclepius',   n:'아스클레피오스' },
-  { f:'sei',         n:'세이쇼나곤' },
-  { f:'illya',       n:'이리야스필' },
-  { f:'baobhan',     n:'요정기사 트리스탄' },
-  { f:'kama',        n:'카마' },
-  { f:'tut',         n:'투탕카멘' },
-  { f:'alexander',   n:'알렉산더' },
-  { f:'elmelloi',    n:'제갈공명(엘멜로이Ⅱ세)' },
-  { f:'musashi',     n:'미야모토 무사시' },
-  { f:'monte',       n:'암굴왕 몬테 크리스토' },
-  { f:'arthur',      n:'아서 펜드래곤(프로토타입)' },
-  { f:'typhon',      n:'튀폰 에페메로스' },
-  { f:'louhi',       n:'로우히' },
-  { f:'moriarty',    n:'제임스 모리어티' },
-  { f:'caren',       n:'아무르(카렌)' },
-  { f:'todo',        n:'도도 헤이스케' },
-  { f:'morgan',      n:'모르간' },
-  { f:'harada',      n:'하라다 사노스케' },
-  { f:'nero',        n:'네로 클라우디우스' },
-  { f:'iori',        n:'미야모토 이오리' },
-  { f:'davinci',     n:'레오나르도 다 빈치' },
-  { f:'xufu',        n:'서복' },
-  { f:'molay',       n:'자크 드 몰레(검)' },
-  { f:'tenochtitlan',n:'테노치티틀란' },
-  { f:'lanling',     n:'난릉왕' },
-  { f:'indra',       n:'인드라' },
-  { f:'gogh',        n:'반 고흐(마이너)' },
+  { f:'gilgamesh',     n:'길가메쉬(캐스터)' },
+  { f:'hanasaki',      n:'꽃피우는 할아버지' },
+  { f:'lanling',       n:'난릉왕' },
+  { f:'nero',          n:'네로 클라우디우스' },
+  { f:'nemo',          n:'네모' },
+  { f:'demeter',       n:'데메테르' },
+  { f:'todo',          n:'도도 헤이스케' },
+  { f:'davinci',       n:'레오나르도 다 빈치' },
+  { f:'ladyavalon',    n:'레이디 아발론' },
+  { f:'louhi',         n:'로우히' },
+  { f:'martha',        n:'마르타' },
+  { f:'medb',          n:'메이브' },
+  { f:'morgan',        n:'모르간' },
+  { f:'musashi',       n:'미야모토 무사시' },
+  { f:'iori',          n:'미야모토 이오리' },
+  { f:'gogh',          n:'반 고흐(마이너)' },
+  { f:'britomart',     n:'브리토마트' },
+  { f:'corday',        n:'샤를로트 코르데' },
+  { f:'xufu',          n:'서복' },
+  { f:'sei',           n:'세이쇼나곤' },
+  { f:'caren',         n:'아무르(카렌)' },
+  { f:'arthur',        n:'아서 펜드래곤(프로토)' },
+  { f:'askalaphos',    n:'아스칼라포스' },
+  { f:'asclepius',     n:'아스클레피오스' },
+  { f:'alexander',     n:'알렉산더' },
+  { f:'monte',         n:'암굴왕 몬테 크리스토' },
+  { f:'yanqing',       n:'연청' },
+  { f:'osakabe',       n:'오사카베히메' },
+  { f:'ozymandias',    n:'오지만디아스' },
+  { f:'baobhan',       n:'요정기사 트리스탄' },
+  { f:'illya',         n:'이리야스필' },
+  { f:'jason',         n:'이아손' },
+  { f:'indra',         n:'인드라' },
+  { f:'molay',         n:'자크 드 몰레(검)' },
+  { f:'jeanne',        n:'잔 다르크' },
+  { f:'elmelloi',      n:'제갈공명(엘멜로이Ⅱ세)' },
+  { f:'moriarty',      n:'제임스 모리어티' },
+  { f:'kama',          n:'카마' },
+  { f:'hokusai',       n:'카츠시카 호쿠사이' },
+  { f:'cualter',       n:'쿠 훌린(얼터)' },
+  { f:'tenochtitlan',  n:'테노치티틀란' },
+  { f:'tut',           n:'투탕카멘' },
+  { f:'typhon',        n:'튀폰 에페메로스' },
+  { f:'paris',         n:'파리스' },
+  { f:'percival',      n:'퍼시빌' },
+  { f:'fran',          n:'프랑켄슈타인' },
+  { f:'flora',         n:'플로라' },
+  { f:'harada',        n:'하라다 사노스케' },
 ];
 let loaded = {};
 let loading = {};
@@ -775,18 +801,18 @@ function load11th() {
 /* 11주년 교환표 양식 */
 function preset11th() {
   const PRESET = [
-    { label:'요구',        color:'#f0932b' },
-    { label:'완구',        color:'#eb4a7f' },
-    { label:'요구만 교환', color:'#9b59b6' },
-    { label:'양도(여)',    color:'#4caf50' },
-    { label:'양도(남)',    color:'#2f9bd8' },
+    { label:'要求\n요구',              color:'#f0932b' },
+    { label:'緩求\n완구',              color:'#eb4a7f' },
+    { label:'要求のみ交換\n요구만 교환', color:'#9b59b6' },
+    { label:'譲女\n양도(여)',          color:'#4caf50' },
+    { label:'譲男\n양도(남)',          color:'#2f9bd8' },
   ];
   if (rows.length && !confirm('현재 표를 지우고 11주년 교환표 양식으로 바꿀까요?')) return;
   document.getElementById('layout').value = 'tier';
   curLayout = 'tier';
   const ea = document.getElementById('exportArea');
   ea.classList.remove('tpl-class','tpl-daily');
-  ea.classList.add('tpl-tier');
+  ea.classList.add('tpl-tier','tpl-a11');
   ea.style.removeProperty('--rlw');
   document.getElementById('btnHdr').style.display = 'none';
   rows = PRESET.map(p => ({
@@ -794,6 +820,7 @@ function preset11th() {
     isHeader: false, tag: '', hideLicon: true, hideLabel: false, hideTag: true, color: p.color,
   }));
   activeRowId = rows[0].id;
+  ea.style.width = '834px';   // 큰 아이콘 6열 기준 (우측 핸들로 조절 가능)
   const ti = document.getElementById('tableTitle');
   if (ti && (!ti.value.trim() || ti.value.trim() === '테이블')) { ti.value = 'FGO 11주년 예장 교환'; syncTitle(); }
   switchTab('a11');
@@ -927,12 +954,13 @@ function updateTag(id, v) {
 function applyLayout() {
   curLayout = document.getElementById('layout').value;
   const ea = document.getElementById('exportArea');
-  ea.classList.remove('tpl-class', 'tpl-daily', 'tpl-tier');
+  ea.classList.remove('tpl-class', 'tpl-daily', 'tpl-tier', 'tpl-a11');
   if (curLayout === 'class') ea.classList.add('tpl-class');
   else if (curLayout === 'tier') ea.classList.add('tpl-tier');
   else ea.classList.add('tpl-daily');
   // 레이아웃 전환 시 --rlw 초기화 (각 레이아웃 CSS 기본값으로 복귀)
   ea.style.removeProperty('--rlw');
+  ea.style.removeProperty('width');
   document.getElementById('btnHdr').style.display = (curLayout === 'daily') ? '' : 'none';
   // 표3 첫 진입 시 예시 행 (세이버 + 청밥)
   if (curLayout === 'tier' && !rows.length) {
@@ -1345,7 +1373,22 @@ async function exportPNG() {
       } catch {}
     }));
 
-    const canvas = await html2canvas(area, { backgroundColor:null, scale:2, useCORS:true, allowTaint:false, logging:false });
+    // html2canvas는 textarea 줄바꿈을 무시함 → 클론에서 div로 치환
+    const canvas = await html2canvas(area, {
+      backgroundColor:null, scale:2, useCORS:true, allowTaint:false, logging:false,
+      onclone: doc => {
+        doc.querySelectorAll('textarea.ltxt').forEach(ta => {
+          const cs = getComputedStyle(ta);
+          const d = doc.createElement('div');
+          d.textContent = ta.value;
+          d.style.cssText = `white-space:pre-wrap;word-break:keep-all;width:100%;
+            font:${cs.font};color:${cs.color};text-align:${cs.textAlign};
+            line-height:${cs.lineHeight};letter-spacing:${cs.letterSpacing};
+            font-weight:${cs.fontWeight};`;
+          ta.replaceWith(d);
+        });
+      },
+    });
     const link = document.createElement('a');
     const fname = (document.getElementById('tableTitle').value||'드롭_테이블').replace(/[^\w가-힣\s]/g,'').trim().replace(/\s+/g,'_')||'fgo_table';
     link.download = fname+'.png';
