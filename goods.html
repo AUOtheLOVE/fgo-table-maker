@@ -53,7 +53,10 @@ body{
 .hrow.on{background:var(--s3);outline:1px solid var(--acc)}
 .hrow.done{color:var(--t3);text-decoration:line-through}
 .hrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.hrow .q{font-weight:700;color:var(--acc);font-variant-numeric:tabular-nums}
+.hrow .q{font-size:11px;color:var(--t2);flex-shrink:0}
+.hrow.done .q{color:var(--t3)}
+.hrow .qin{width:42px;background:var(--bg);border:1px solid var(--line);border-radius:3px;
+  padding:2px 4px;font-size:11px;color:var(--t1);flex-shrink:0}
 .side-foot{padding:6px 10px;border-top:1px solid var(--line);font-size:11px;color:var(--t2)}
 
 .main{flex:1;display:flex;flex-direction:column;overflow:hidden}
@@ -126,7 +129,15 @@ body{
     <div class="sep"></div>
     <button class="btn dl" onclick="clearHotspots()">전체 지우기</button>
   </span>
+  <span id="runTools" style="display:none;gap:6px;align-items:center">
+    <button class="btn" onclick="resetDone()">전체 해제</button>
+  </span>
   <span style="margin-left:auto;display:flex;gap:6px;align-items:center">
+    <span class="lbl">표식</span>
+    <input class="num" id="nIn" type="number" value="1" min="0" max="99"/>
+    <button class="btn" onclick="applyN()" title="선택한 품목에 표식 숫자 지정">선택에 적용</button>
+    <button class="btn pc-only" onclick="applyNAll()" title="모든 품목에 일괄 적용">전체</button>
+    <div class="sep"></div>
     <button class="btn" id="btnQty" onclick="toggleQty()">숫자 표시</button>
     <button class="btn" onclick="undo()">되돌리기</button>
     <button class="btn pc-only" onclick="document.getElementById('imgIn').click()">이미지 교체</button>
@@ -254,7 +265,7 @@ async function openProject(id) {
   if (!id) return;
   let d; try { d = JSON.parse(localStorage.getItem(LS_P(id))); } catch { d = null; }
   if (!d) { setSb('불러오기 실패'); return; }
-  P = d; selId = null; undoStack = [];
+  P = migrate(d); selId = null; undoStack = [];
   const blob = await idbGet(id);
   if (blob) await setImageFromBlob(blob, false); else { img = null; }
   renderProjSel(); renderAll();
@@ -323,9 +334,20 @@ function undo() {
 }
 
 /* ══════════ 핫스팟 ══════════ */
-function newHot(x, y, w, h, qty) {
+/* n = 품목에 붙는 고정 표식 숫자(0이면 표시 안 함) · done = 선점 처리 여부 */
+function newHot(x, y, w, h, n) {
   return { id: 'h' + (++hotCnt) + '_' + Math.random().toString(36).slice(2, 6),
-           x, y, w, h, qty: qty == null ? 1 : qty, max: qty == null ? 1 : qty, name: '' };
+           x, y, w, h, n: n || 0, done: false, name: '' };
+}
+/* 구버전(qty/max) 데이터 이관 */
+function migrate(p) {
+  if (!p || !p.hotspots) return p;
+  for (const h of p.hotspots) {
+    if (h.n === undefined) h.n = 0;
+    if (h.done === undefined) h.done = (h.qty !== undefined ? h.qty <= 0 : false);
+    delete h.qty; delete h.max;
+  }
+  return p;
 }
 function clearHotspots() {
   if (!P || !P.hotspots.length) return;
@@ -516,10 +538,10 @@ function renderAll() {
 function renderHotspots() {
   const L = $('layer'); if (!P) { L.innerHTML = ''; return; }
   L.innerHTML = P.hotspots.map(h => {
-    const done = h.qty <= 0;
+    const done = !!h.done;
     return `<div class="hs${done ? ' done' : ''}${h.id === selId ? ' sel' : ''}" data-id="${h.id}"
       style="left:${h.x*100}%;top:${h.y*100}%;width:${h.w*100}%;height:${h.h*100}%">
-      ${(P.showQty && !done) ? `<span class="qty">+${h.qty}</span>` : ''}
+      ${(P.showQty && !done && h.n > 0) ? `<span class="qty">+${h.n}</span>` : ''}
       <div class="hd nw" data-r="nw"></div><div class="hd ne" data-r="ne"></div>
       <div class="hd sw" data-r="sw"></div><div class="hd se" data-r="se"></div>
     </div>`;
@@ -528,17 +550,44 @@ function renderHotspots() {
 function renderList() {
   const el = $('hlist'); if (!P) { el.innerHTML = ''; $('sfoot').textContent = '-'; return; }
   el.innerHTML = P.hotspots.map((h, i) => {
-    const done = h.qty <= 0;
-    return `<div class="hrow${done ? ' done' : ''}${h.id === selId ? ' on' : ''}" onclick="pick('${h.id}')">
+    return `<div class="hrow${h.done ? ' done' : ''}${h.id === selId ? ' on' : ''}" onclick="pick('${h.id}')">
       <span class="nm">${esc(h.name || ('품목 ' + (i + 1)))}</span>
-      <span class="q">${done ? '완료' : '+' + h.qty}</span>
+      <input class="qin" type="number" min="0" max="99" value="${h.n || 0}" title="표식 숫자(0=없음)"
+        onclick="event.stopPropagation()" onchange="setN('${h.id}',this.value)"/>
+      <span class="q">${h.done ? '선점' : '남음'}</span>
     </div>`;
   }).join('');
-  const left = P.hotspots.filter(h => h.qty > 0).length;
-  const sum = P.hotspots.reduce((a, h) => a + Math.max(0, h.qty), 0);
-  $('sfoot').textContent = `전체 ${P.hotspots.length} · 남음 ${left} (수량 ${sum})`;
+  const left = P.hotspots.filter(h => !h.done).length;
+  $('sfoot').textContent = `전체 ${P.hotspots.length} · 남음 ${left} · 선점 ${P.hotspots.length - left}`;
 }
 function pick(id) { selId = id; renderAll(); }
+function setN(id, v) {
+  const h = P.hotspots.find(x => x.id === id); if (!h) return;
+  snap(); h.n = Math.max(0, Math.min(99, parseInt(v, 10) || 0));
+  save(); renderAll();
+}
+/* 선택 품목 숫자 지정 (툴바) */
+function applyN() {
+  if (!P) return;
+  const v = Math.max(0, Math.min(99, parseInt($('nIn').value, 10) || 0));
+  const targets = selId ? P.hotspots.filter(h => h.id === selId) : [];
+  if (!targets.length) { setSb('먼저 품목을 클릭해 선택하세요'); return; }
+  snap(); targets.forEach(h => h.n = v); save(); renderAll();
+  setSb(v ? `표식 +${v} 지정` : '표식 제거');
+}
+function applyNAll() {
+  if (!P || !P.hotspots.length) return;
+  const v = Math.max(0, Math.min(99, parseInt($('nIn').value, 10) || 0));
+  if (!confirm(`모든 품목의 표식을 ${v ? '+' + v : '없음'}(으)로 바꿀까요?`)) return;
+  snap(); P.hotspots.forEach(h => h.n = v); save(); renderAll();
+}
+/* 전체 선점 해제 */
+function resetDone() {
+  if (!P || !P.hotspots.length) return;
+  if (!confirm('선점 표시를 전부 해제할까요?')) return;
+  snap(); P.hotspots.forEach(h => h.done = false); save(); renderAll();
+  setSb('전체 해제됨');
+}
 
 /* ══════════ 모드 ══════════ */
 function setMode(m) {
@@ -546,10 +595,12 @@ function setMode(m) {
   $('mEdit').classList.toggle('on', m === 'edit');
   $('mRun').classList.toggle('on', m === 'run');
   $('editTools').style.display = m === 'edit' ? 'flex' : 'none';
+  $('runTools').style.display = m === 'run' ? 'flex' : 'none';
   document.body.classList.toggle('mode-run', m === 'run');
   gridAreaMode = false; $('btnGrid').classList.remove('on');
   selId = null; renderAll();
-  setSb(m === 'edit' ? '편집 모드 — 드래그로 영역 생성/이동' : '운영 모드 — 클릭 = 1개 차감, Shift+클릭(또는 길게 누르기) = 복구');
+  setSb(m === 'edit' ? '편집 모드 — 드래그로 영역 생성/이동, 더블클릭 = 표식 숫자'
+                     : '운영 모드 — 클릭 = 선점/해제 토글, Shift+클릭(또는 길게 누르기) = 표식 숫자');
 }
 
 /* ══════════ 포인터 조작 ══════════ */
@@ -572,7 +623,8 @@ layer.addEventListener('pointerdown', e => {
     if (!hsEl) return;
     const h = P.hotspots.find(x => x.id === hsEl.dataset.id); if (!h) return;
     lpFired = false;
-    lpTimer = setTimeout(() => { lpFired = true; snap(); h.qty++; h.max = Math.max(h.max, h.qty); save(); renderAll(); setSb(`복구 → +${h.qty}`); }, 550);
+    // 길게 누르기 = 표식 숫자 편집
+    lpTimer = setTimeout(() => { lpFired = true; editN(h); }, 550);
     return;
   }
 
@@ -626,11 +678,11 @@ layer.addEventListener('pointerup', e => {
     if (lpFired) { lpFired = false; return; }
     const hsEl = e.target.closest('.hs'); if (!hsEl) return;
     const h = P.hotspots.find(x => x.id === hsEl.dataset.id); if (!h) return;
+    if (e.shiftKey || e.ctrlKey) { editN(h); return; }
     snap();
-    if (e.shiftKey || e.ctrlKey) { h.qty++; h.max = Math.max(h.max, h.qty); }
-    else h.qty = Math.max(0, h.qty - 1);
+    h.done = !h.done;                       // 클릭 = 선점/해제 토글
     save(); renderAll();
-    setSb(h.qty <= 0 ? '완료 처리 (Shift+클릭으로 복구)' : `남은 수량 +${h.qty}`);
+    setSb(h.done ? '선점 처리 (다시 클릭하면 해제)' : '해제됨');
     return;
   }
   if (!drag) return;
@@ -647,12 +699,22 @@ layer.addEventListener('pointerup', e => {
 });
 layer.addEventListener('pointercancel', () => { hideRubber(); drag = null; if (lpTimer) clearTimeout(lpTimer); });
 layer.addEventListener('contextmenu', e => {
-  if (mode !== 'run') return;
   const hsEl = e.target.closest('.hs'); if (!hsEl) return;
   e.preventDefault();
-  const h = P.hotspots.find(x => x.id === hsEl.dataset.id);
-  snap(); h.qty++; h.max = Math.max(h.max, h.qty); save(); renderAll();
+  const h = P.hotspots.find(x => x.id === hsEl.dataset.id); if (h) editN(h);
 });
+layer.addEventListener('dblclick', e => {
+  const hsEl = e.target.closest('.hs'); if (!hsEl) return;
+  const h = P.hotspots.find(x => x.id === hsEl.dataset.id); if (h) editN(h);
+});
+/* 표식 숫자 입력 */
+function editN(h) {
+  const v = prompt('이 품목의 표식 숫자 (0이면 표시 안 함)', h.n || 0);
+  if (v === null) return;
+  snap(); h.n = Math.max(0, Math.min(99, parseInt(v, 10) || 0));
+  save(); renderAll();
+  setSb(h.n ? `표식 +${h.n}` : '표식 없음');
+}
 
 function showRubber(d) {
   const r = $('rubber'), br = stageRect(), st = $('stage').getBoundingClientRect();
@@ -706,15 +768,15 @@ function exportPNG() {
   x.drawImage(img, 0, 0);
   for (const h of P.hotspots) {
     const px = h.x * c.width, py = h.y * c.height, pw = h.w * c.width, ph = h.h * c.height;
-    if (h.qty <= 0) {
+    if (h.done) {
       x.fillStyle = 'rgba(255,255,255,0.90)';
       x.fillRect(px, py, pw, ph);
       x.strokeStyle = 'rgba(190,190,190,0.85)'; x.lineWidth = Math.max(1, c.width / 900);
       x.strokeRect(px, py, pw, ph);
-    } else if (P.showQty) {
+    } else if (P.showQty && h.n > 0) {
       const fs = Math.max(13, Math.min(pw, ph) * 0.30);
       x.font = `800 ${fs}px system-ui,'Noto Sans KR',sans-serif`;
-      const t = '+' + h.qty;
+      const t = '+' + h.n;
       const tw = x.measureText(t).width, pad = fs * 0.22;
       const bx = px + pw - tw - pad * 2, by = py;
       x.fillStyle = '#e02020';
@@ -746,7 +808,7 @@ $('jsonIn').addEventListener('change', async e => {
     const o = JSON.parse(await f.text());
     if (o.app !== 'fgogoods') throw new Error('형식이 다릅니다');
     const id = 'g' + Date.now().toString(36);
-    P = Object.assign({}, o.project, { id });
+    P = migrate(Object.assign({}, o.project, { id }));
     const ix = loadIndex(); ix.unshift({ id, name: P.name, updatedAt: Date.now() }); saveIndex(ix);
     if (o.image) {
       const blob = await (await fetch(o.image)).blob();
