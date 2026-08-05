@@ -85,6 +85,18 @@ body.placing #layer{cursor:copy}
   user-select:none}
 .mark.sel{outline:3px solid var(--acc);outline-offset:2px}
 #rubber{position:absolute;background:rgba(255,255,255,.6);border:2px dashed var(--acc);display:none;pointer-events:none}
+#ppv{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:none;overflow:visible}
+#ppv.on{display:block}
+#ppv polyline,#ppv polygon{fill:rgba(255,255,255,.55);stroke:#9a7c2e;stroke-width:.35;
+  vector-effect:non-scaling-stroke;stroke-dasharray:4 3}
+#ppv circle{fill:#fff;stroke:#9a7c2e;stroke-width:.3;vector-effect:non-scaling-stroke}
+#ppv circle.first{fill:#9a7c2e}
+.mask.poly{background:none}
+.mask.poly .fill{position:absolute;inset:0;background:rgba(255,255,255,.92)}
+.mask.poly.sel{outline:2px dashed var(--acc);outline-offset:1px}
+.vh{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;background:#fff;
+  border:2px solid var(--acc);border-radius:50%;z-index:12;touch-action:none;cursor:grab}
+.vh::after{content:'';position:absolute;inset:-7px}
 
 .statusbar{background:var(--s1);border-top:1px solid var(--line);padding:6px 14px;font-size:11.5px;color:var(--t2);flex-shrink:0}
 .empty{padding:50px 20px;text-align:center;color:var(--t3);line-height:2}
@@ -105,6 +117,8 @@ body.placing #layer{cursor:copy}
   <select class="sel-i" id="projSel" onchange="openProject(this.value)"></select>
   <button class="btn" onclick="newProject()">+ 새 소분</button>
   <div class="sep"></div>
+  <button class="btn" id="btnPoly" onclick="togglePoly()" title="클릭으로 점을 찍어 자유 모양으로 가리기">다각형</button>
+  <div class="sep"></div>
   <button class="btn" id="btnMark" onclick="startPlace()">+ 숫자</button>
   <button class="btn" onclick="scaleMarks(1.18)" title="숫자 전체 크게">크기+</button>
   <button class="btn" onclick="scaleMarks(1/1.18)" title="숫자 전체 작게">크기−</button>
@@ -122,8 +136,9 @@ body.placing #layer{cursor:copy}
       </ul>
       <b>화이트 처리</b>
       <ul>
-        <li>빈 곳 <b>드래그</b> → 화이트 처리</li>
-        <li>화이트 <b>클릭</b> → 선택 (이동·크기 조절)</li>
+        <li>빈 곳 <b>드래그</b> → 사각형 화이트</li>
+        <li><b>다각형</b> 버튼 → 클릭으로 점 찍기 → 첫 점 클릭 / 더블클릭 / <b>Enter</b> → 닫기</li>
+        <li>화이트 <b>클릭</b> → 선택 (이동·크기 조절, 다각형은 꼭짓점 조절)</li>
         <li><b>한 번 더 클릭</b> 또는 <b>더블클릭</b> → 사라짐</li>
       </ul>
       <b>공통</b>
@@ -170,6 +185,7 @@ body.placing #layer{cursor:copy}
       <img id="baseImg" alt=""/>
       <div id="layer"></div>
       <div id="rubber"></div>
+      <svg id="ppv" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
     </div>
   </div>
 </div>
@@ -195,6 +211,17 @@ let undoStack = [];
 let placing = false;
 let selMark = null;   // 선택된 숫자 표식 index
 let selMask = null;   // 선택된 흰 박스 index
+let polyMode = false; // 다각형 그리기 모드
+let polyPts = [];     // 그리는 중인 꼭짓점 [[x,y],...]
+
+/* 마스크 유틸 — 사각형 {x,y,w,h} / 다각형 {p:[[x,y],...]} 둘 다 취급 */
+const isPoly = m => Array.isArray(m.p);
+function bbox(m) {
+  if (!isPoly(m)) return { x: m.x, y: m.y, w: m.w, h: m.h };
+  const xs = m.p.map(q => q[0]), ys = m.p.map(q => q[1]);
+  const x = Math.min(...xs), y = Math.min(...ys);
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+}
 
 const $ = id => document.getElementById(id);
 const setSb = t => $('sb').textContent = t;
@@ -380,13 +407,60 @@ function renderAll() {
     P.marks.map((m, i) =>
       `<div class="mark${i === selMark ? ' sel' : ''}" data-t="m" data-i="${i}"
         style="left:${m.x*100}%;top:${m.y*100}%;font-size:${Math.max(9,(P.fs||DEF_FS)*wpx)}px">+${m.n}</div>`).join('') +
-    P.masks.map((m, i) =>
-      `<div class="mask${i === selMask ? ' sel' : ''}" data-t="k" data-i="${i}"
-        style="left:${m.x*100}%;top:${m.y*100}%;width:${m.w*100}%;height:${m.h*100}%">${
-        i === selMask ? ['nw','n','ne','e','se','s','sw','w'].map(r => `<div class="mh ${r}" data-r="${r}"></div>`).join('') : ''
-      }</div>`).join('');
+    P.masks.map((m, i) => {
+      const b = bbox(m), sel = i === selMask;
+      if (isPoly(m)) {
+        const cp = m.p.map(q => `${((q[0]-b.x)/(b.w||1e-6)*100).toFixed(3)}% ${((q[1]-b.y)/(b.h||1e-6)*100).toFixed(3)}%`).join(',');
+        return `<div class="mask poly${sel ? ' sel' : ''}" data-t="k" data-i="${i}"
+          style="left:${b.x*100}%;top:${b.y*100}%;width:${b.w*100}%;height:${b.h*100}%;
+                 clip-path:polygon(${cp});-webkit-clip-path:polygon(${cp})"><div class="fill"></div></div>`;
+      }
+      return `<div class="mask${sel ? ' sel' : ''}" data-t="k" data-i="${i}"
+        style="left:${b.x*100}%;top:${b.y*100}%;width:${b.w*100}%;height:${b.h*100}%">${
+        sel ? ['nw','n','ne','e','se','s','sw','w'].map(r => `<div class="mh ${r}" data-r="${r}"></div>`).join('') : ''
+      }</div>`;
+    }).join('') +
+    // 다각형 꼭짓점 핸들 (clip-path에 잘리지 않도록 마스크 바깥에 별도로)
+    ((selMask !== null && P.masks[selMask] && isPoly(P.masks[selMask]))
+      ? P.masks[selMask].p.map((q, vi) =>
+          `<div class="vh" data-t="v" data-v="${vi}" style="left:${q[0]*100}%;top:${q[1]*100}%"></div>`).join('')
+      : '');
 }
 window.addEventListener('resize', () => { if (P && img) renderAll(); });
+
+/* ══════════ 다각형 ══════════ */
+function togglePoly() {
+  if (!img) { setSb('이미지 먼저'); return; }
+  polyMode = !polyMode;
+  polyPts = [];
+  if (polyMode && placing) endPlace();
+  $('btnPoly').classList.toggle('on', polyMode);
+  drawPoly();
+  setSb(polyMode ? '클릭해서 점 찍기 · 첫 점 다시 클릭 또는 더블클릭/Enter = 닫기 · Esc = 취소'
+                 : '다각형 모드 해제');
+}
+function drawPoly() {
+  const el = $('ppv');
+  if (!polyMode || !polyPts.length) { el.classList.remove('on'); el.innerHTML = ''; return; }
+  const pts = polyPts.map(q => `${(q[0]*100).toFixed(3)},${(q[1]*100).toFixed(3)}`).join(' ');
+  const dots = polyPts.map((q, i) =>
+    `<circle class="${i===0?'first':''}" cx="${(q[0]*100).toFixed(3)}" cy="${(q[1]*100).toFixed(3)}" r="1.1"/>`).join('');
+  el.innerHTML = (polyPts.length > 2 ? `<polygon points="${pts}"/>` : `<polyline points="${pts}" fill="none"/>`) + dots;
+  el.classList.add('on');
+}
+function finishPoly() {
+  if (polyPts.length < 3) { setSb('점을 3개 이상 찍어야 합니다'); return; }
+  snap();
+  P.masks.push({ p: polyPts.map(q => [clamp01(q[0]), clamp01(q[1])]) });
+  polyPts = []; polyMode = false;
+  $('btnPoly').classList.remove('on');
+  drawPoly(); save(); renderAll();
+  setSb('다각형 화이트 처리 · 클릭 = 선택(꼭짓점 조절) · 한 번 더 클릭 = 사라짐');
+}
+function cancelPoly() {
+  polyPts = []; polyMode = false;
+  $('btnPoly').classList.remove('on'); drawPoly(); setSb('취소');
+}
 
 /* ══════════ 숫자 표식 배치 ══════════ */
 function startPlace() {
@@ -411,7 +485,26 @@ layer.addEventListener('pointerdown', e => {
   if (!P || !img) return;
   const el = e.target.closest('[data-t]');
   const p = toN(e);
+
+  // 다각형 그리는 중 — 점 찍기 / 첫 점 근처면 닫기
+  if (polyMode) {
+    if (polyPts.length >= 3) {
+      const r = rectOf(), f = polyPts[0];
+      if (Math.hypot((p.x-f[0])*r.width, (p.y-f[1])*r.height) < 14) { finishPoly(); return; }
+    }
+    polyPts.push([clamp01(p.x), clamp01(p.y)]);
+    drawPoly(); setSb(`점 ${polyPts.length}개 · 첫 점 클릭/더블클릭/Enter로 닫기`);
+    return;
+  }
+
   try { layer.setPointerCapture(e.pointerId); } catch {}
+
+  if (el && el.dataset.t === 'v') {          // 다각형 꼭짓점
+    const vi = +el.dataset.v;
+    drag = { type: 'vertex', i: selMask, v: vi, sx: e.clientX, sy: e.clientY,
+             o: [...P.masks[selMask].p[vi]], moved: false };
+    return;
+  }
 
   if (el && el.dataset.t === 'm') {                 // 숫자 표식: 이동 or 값 수정
     const i = +el.dataset.i;
@@ -428,7 +521,9 @@ layer.addEventListener('pointerdown', e => {
     }
     const already = (selMask === i);
     if (!already) { selMask = i; renderAll(); }
-    drag = { type: 'kmove', i, already, sx: e.clientX, sy: e.clientY, o: { ...P.masks[i] }, moved: false };
+    const m = P.masks[i];
+    drag = { type: 'kmove', i, already, sx: e.clientX, sy: e.clientY, moved: false,
+             o: isPoly(m) ? { p: m.p.map(q => [...q]) } : { ...m } };
     return;
   }
   if (placing) { drag = { type: 'place', px: p.x, py: p.y }; return; }
@@ -453,11 +548,23 @@ layer.addEventListener('pointermove', e => {
     P.marks[drag.i].y = clamp01(drag.o.y + dy / r.height);
     renderAll(); return;
   }
+  if (drag.type === 'vertex') {
+    if (!far) return;
+    if (!drag.moved) snap();
+    drag.moved = true;
+    const r = rectOf();
+    P.masks[drag.i].p[drag.v] = [clamp01(drag.o[0] + dx / r.width), clamp01(drag.o[1] + dy / r.height)];
+    renderAll(); return;
+  }
   if (drag.type === 'kmove' || drag.type === 'kresize') {
     if (!far) return;
     if (!drag.moved) snap();
     drag.moved = true;
     const r = rectOf(), nx = dx / r.width, ny = dy / r.height, m = P.masks[drag.i], o = drag.o;
+    if (isPoly(m)) {   // 다각형은 통째 이동만
+      m.p = o.p.map(q => [clamp01(q[0] + nx), clamp01(q[1] + ny)]);
+      renderAll(); return;
+    }
     if (drag.type === 'kmove') { m.x = clamp01(o.x + nx); m.y = clamp01(o.y + ny); }
     else {
       let x = o.x, y = o.y, w = o.w, h = o.h;
@@ -487,6 +594,10 @@ layer.addEventListener('pointerup', e => {
   if (d.type === 'mark') {
     if (d.moved) { save(); setSb('숫자 이동'); }
     else { selMark = d.i; renderAll(); setSb('선택됨 · Delete 삭제 · 더블클릭 값 변경'); }
+    return;
+  }
+  if (d.type === 'vertex') {
+    if (d.moved) { save(); setSb('꼭짓점 이동'); }
     return;
   }
   if (d.type === 'kmove' || d.type === 'kresize') {
@@ -557,7 +668,13 @@ const hideRubber = () => $('rubber').style.display = 'none';
 document.addEventListener('keydown', e => {
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
-  if (e.key === 'Escape') { if (placing) endPlace(); if (selMark !== null || selMask !== null) { selMark = selMask = null; renderAll(); } return; }
+  if (e.key === 'Enter' && polyMode) { e.preventDefault(); finishPoly(); return; }
+  if (e.key === 'Escape') {
+    if (polyMode) { cancelPoly(); return; }
+    if (placing) endPlace();
+    if (selMark !== null || selMask !== null) { selMark = selMask = null; renderAll(); }
+    return;
+  }
   if (e.key === 'Delete' || e.key === 'Backspace') {
     if (selMark !== null) { e.preventDefault(); deleteMark(selMark); }
     else if (selMask !== null) { e.preventDefault(); deleteMask(selMask); }
@@ -566,9 +683,10 @@ document.addEventListener('keydown', e => {
 /* 더블클릭: 숫자 = 값 변경 · 빈 공간 = 그 자리에 숫자 추가
    (흰 박스는 두 번째 클릭에서 이미 삭제되므로 여기서 처리하지 않는다) */
 layer.addEventListener('dblclick', e => {
+  if (polyMode) { e.preventDefault(); finishPoly(); return; }
   const m = e.target.closest('[data-t="m"]');
   if (m) { e.preventDefault(); editMark(+m.dataset.i); return; }
-  if (e.target.closest('[data-t="k"]')) return;
+  if (e.target.closest('[data-t="k"]') || e.target.closest('[data-t="v"]')) return;
   e.preventDefault();
   const p = toN(e);
   addMark(clamp01(p.x), clamp01(p.y));
@@ -614,8 +732,15 @@ function exportPNG() {
     x.fillText(t, bx + bw / 2, by + bh / 2 + fs * 0.03);
   }
   x.fillStyle = 'rgba(255,255,255,0.92)';
-  for (const m of P.masks)
-    x.fillRect(m.x * c.width, m.y * c.height, m.w * c.width, m.h * c.height);
+  for (const m of P.masks) {
+    if (isPoly(m)) {
+      x.beginPath();
+      m.p.forEach((q, i) => i ? x.lineTo(q[0]*c.width, q[1]*c.height) : x.moveTo(q[0]*c.width, q[1]*c.height));
+      x.closePath(); x.fill();
+    } else {
+      x.fillRect(m.x * c.width, m.y * c.height, m.w * c.width, m.h * c.height);
+    }
+  }
   const a = document.createElement('a');
   a.download = (P.name || '소분').replace(/[^\w가-힣\s-]/g, '').trim().replace(/\s+/g, '_') + '_잔여.png';
   a.href = c.toDataURL('image/png'); a.click();
