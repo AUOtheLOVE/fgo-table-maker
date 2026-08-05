@@ -87,10 +87,14 @@ body.placing #layer{cursor:copy}
 #rubber{position:absolute;background:rgba(255,255,255,.6);border:2px dashed var(--acc);display:none;pointer-events:none}
 #ppv{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:none;overflow:visible}
 #ppv.on{display:block}
-#ppv polyline,#ppv polygon{fill:rgba(255,255,255,.55);stroke:#9a7c2e;stroke-width:.35;
-  vector-effect:non-scaling-stroke;stroke-dasharray:4 3}
-#ppv circle{fill:#fff;stroke:#9a7c2e;stroke-width:.3;vector-effect:non-scaling-stroke}
-#ppv circle.first{fill:#9a7c2e}
+#ppv polyline,#ppv polygon{fill:rgba(255,255,255,.55);stroke:#9a7c2e;stroke-width:1.6;
+  vector-effect:non-scaling-stroke;stroke-dasharray:5 4;stroke-linejoin:round}
+/* 점은 SVG가 아니라 HTML — 이미지 비율·크기와 무관하게 항상 같은 크기 */
+#ppvDots{position:absolute;inset:0;pointer-events:none;display:none}
+#ppvDots.on{display:block}
+#ppvDots i{position:absolute;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-radius:50%;
+  background:#fff;border:2px solid var(--acc);box-sizing:border-box}
+#ppvDots i.first{background:var(--acc);width:11px;height:11px;margin:-5.5px 0 0 -5.5px}
 .mask.poly{background:none}
 .mask.poly .fill{position:absolute;inset:0;background:rgba(255,255,255,.92)}
 .mask.poly.sel{outline:2px dashed var(--acc);outline-offset:1px}
@@ -186,6 +190,7 @@ body.placing #layer{cursor:copy}
       <div id="layer"></div>
       <div id="rubber"></div>
       <svg id="ppv" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+      <div id="ppvDots"></div>
     </div>
   </div>
 </div>
@@ -440,13 +445,18 @@ function togglePoly() {
                  : '다각형 모드 해제');
 }
 function drawPoly() {
-  const el = $('ppv');
-  if (!polyMode || !polyPts.length) { el.classList.remove('on'); el.innerHTML = ''; return; }
+  const el = $('ppv'), dt = $('ppvDots');
+  if (!polyMode || !polyPts.length) {
+    el.classList.remove('on'); el.innerHTML = '';
+    dt.classList.remove('on'); dt.innerHTML = '';
+    return;
+  }
   const pts = polyPts.map(q => `${(q[0]*100).toFixed(3)},${(q[1]*100).toFixed(3)}`).join(' ');
-  const dots = polyPts.map((q, i) =>
-    `<circle class="${i===0?'first':''}" cx="${(q[0]*100).toFixed(3)}" cy="${(q[1]*100).toFixed(3)}" r="1.1"/>`).join('');
-  el.innerHTML = (polyPts.length > 2 ? `<polygon points="${pts}"/>` : `<polyline points="${pts}" fill="none"/>`) + dots;
+  el.innerHTML = polyPts.length > 2 ? `<polygon points="${pts}"/>` : `<polyline points="${pts}" fill="none"/>`;
   el.classList.add('on');
+  dt.innerHTML = polyPts.map((q, i) =>
+    `<i class="${i === 0 ? 'first' : ''}" style="left:${q[0]*100}%;top:${q[1]*100}%"></i>`).join('');
+  dt.classList.add('on');
 }
 function finishPoly() {
   if (polyPts.length < 3) { setSb('점을 3개 이상 찍어야 합니다'); return; }
