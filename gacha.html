@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>확챠 플래너</title>
+<meta name="description" content="복주머니 확챠 플래너. 보유 서번트와 보구레벨을 체크하면 각 복주머니의 신규 획득률을 계산해 어디를 돌릴지 알려줍니다."/>
+<meta property="og:type" content="website"/>
+<meta property="og:site_name" content="FGO 확챠 플래너"/>
+<meta property="og:title" content="확챠 플래너"/>
+<meta property="og:description" content="보유 체크 → 복주머니별 신규 획득률 자동 계산."/>
+<meta property="og:url" content="https://ryuri-r.github.io/fgo-table-maker/gacha.html"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f7f5f0; --s1:#ffffff; --s2:#f0ede8; --s3:#e8e4de; --line:#ddd9d2;
+  --t1:#1a1814; --t2:#6b6660; --t3:#aaa49e; --acc:#9a7c2e; --acc2:#7a5e1e;
+  --new:#2e8b57; --own:#8a8580; --skp:#c0392b;
+  --red:#c94f6d; --wht:#5b7fb0;
+  --skpop:.7;
+}
+body{
+  background:var(--bg);color:var(--t1);
+  font-family:'Segoe UI','Noto Sans KR',system-ui,sans-serif;
+  height:100vh;display:flex;flex-direction:column;overflow:hidden;
+  font-size:13px;line-height:1.5;
+}
+
+/* ── 상단바 ── */
+.topbar{background:var(--s1);border-bottom:1px solid var(--line);padding:8px 14px;
+  display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap}
+.topbar h1{font-size:14px;font-weight:600;letter-spacing:.02em;white-space:nowrap}
+.topbar h1 span{color:var(--acc)}
+.spacer{margin-left:auto}
+
+.btn{background:var(--s2);color:var(--t1);border:1px solid var(--line);border-radius:5px;
+  padding:0 11px;height:29px;font-size:12px;font-family:inherit;
+  display:inline-flex;align-items:center;justify-content:center;gap:5px;
+  cursor:pointer;white-space:nowrap;transition:background .1s,border-color .1s,color .1s}
+.btn:hover{background:var(--s3);border-color:var(--t3)}
+.btn.acc{border-color:var(--acc);color:var(--acc)}
+.btn.acc:hover{background:var(--acc);color:#fff}
+.btn.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.btn.on:hover{background:var(--acc2)}
+.btn.danger:hover{background:var(--skp);color:#fff;border-color:var(--skp)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.sm{height:24px;padding:0 8px;font-size:11px}
+
+.sel,.inp{background:var(--bg);color:var(--t1);border:1px solid var(--line);border-radius:5px;
+  height:29px;padding:0 8px;font-size:12px;font-family:inherit;outline:none;transition:border-color .12s}
+.sel:focus,.inp:focus{border-color:var(--acc)}
+.sel.wide{max-width:340px}
+.sep{width:1px;height:18px;background:var(--line);flex-shrink:0}
+a.navlink{text-decoration:none}
+
+/* ── 스텝 바 ── */
+.steps{background:var(--s1);border-bottom:1px solid var(--line);padding:0 14px;display:flex;gap:2px;flex-shrink:0}
+.step{padding:9px 16px;font-size:12px;cursor:pointer;color:var(--t2);
+  border:none;background:none;border-bottom:2px solid transparent;font-family:inherit;letter-spacing:.02em}
+.step:hover{color:var(--t1)}
+.step.active{color:var(--acc);border-bottom-color:var(--acc);font-weight:600}
+.step .num{display:inline-block;width:16px;height:16px;line-height:16px;border-radius:50%;
+  background:var(--s3);color:var(--t2);font-size:10px;text-align:center;margin-right:5px}
+.step.active .num{background:var(--acc);color:#fff}
+
+/* ── 본문 ── */
+.view{flex:1;overflow-y:auto;padding:12px 14px 70px}
+.view::-webkit-scrollbar{width:9px}
+.view::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px}
+.hide{display:none!important}
+
+.bar{background:var(--s1);border:1px solid var(--line);border-radius:7px;
+  padding:8px 10px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:10px}
+.bar .lbl{font-size:11px;color:var(--t3);margin-right:2px}
+
+.chip{background:var(--s2);border:1px solid var(--line);border-radius:20px;
+  padding:3px 10px;font-size:11px;cursor:pointer;color:var(--t2);transition:all .1s;user-select:none}
+.chip:hover{border-color:var(--t3);color:var(--t1)}
+.chip.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+
+/* ── STEP1 서번트 그리드 ── */
+.sgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:6px}
+.sc{position:relative;background:var(--s1);border:1px solid var(--line);border-radius:6px;
+  padding:5px 3px 4px;display:flex;flex-direction:column;align-items:center;gap:3px;
+  cursor:pointer;user-select:none;transition:border-color .1s,background .1s}
+.sc:hover{border-color:var(--acc)}
+.sc img{width:56px;height:56px;object-fit:contain;border-radius:4px;transition:filter .12s,opacity .12s}
+.sc .nm{font-size:9px;color:var(--t2);text-align:center;line-height:1.25;
+  max-height:2.5em;overflow:hidden;word-break:keep-all}
+.sc .no{position:absolute;top:2px;left:3px;font-size:8px;color:var(--t3)}
+.sc.owned{background:#eef5ee;border-color:#b9d4b9}
+.sc.owned img{filter:grayscale(.55) brightness(.94)}
+.np{position:absolute;top:3px;right:3px;background:var(--new);color:#fff;
+  font-size:9px;font-weight:700;border-radius:4px;padding:1px 4px;letter-spacing:.02em}
+.np.max{background:var(--acc)}
+
+/* ── 고정 하단바 ── */
+.foot{position:fixed;left:0;right:0;bottom:0;background:var(--s1);border-top:1px solid var(--line);
+  padding:8px 14px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;z-index:30}
+.foot .stat{font-size:12px;color:var(--t2)}
+.foot .stat b{color:var(--acc);font-weight:700}
+
+/* ── STEP2 복주머니 ── */
+.summary{background:var(--s1);border:1px solid var(--line);border-radius:7px;padding:10px 12px;margin-bottom:10px;font-size:12px}
+.summary .hl{color:var(--acc);font-weight:700}
+
+#bagWrap{display:grid;gap:9px}
+.bag{background:var(--s1);border:1px solid var(--line);border-radius:8px;overflow:hidden;
+  display:flex;flex-direction:column;transition:box-shadow .12s,border-color .12s}
+.bag-hd{display:flex;align-items:center;gap:6px;padding:6px 9px;background:var(--s2);border-bottom:1px solid var(--line)}
+.grp{font-size:10px;font-weight:700;border-radius:4px;padding:1px 6px;color:#fff;flex-shrink:0}
+.grp.R{background:var(--red)}
+.grp.W{background:var(--wht)}
+.grp.N{background:var(--t3)}
+.bag-nm{font-size:11.5px;font-weight:600;flex:1;min-width:0;outline:none;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bag-nm:focus{white-space:normal;background:#fff;border-radius:3px;box-shadow:0 0 0 1px var(--acc)}
+.bag-body{display:flex;flex-wrap:wrap;gap:5px;padding:8px 9px}
+
+.fc{position:relative;width:62px;display:flex;flex-direction:column;align-items:center;gap:2px;
+  cursor:default;user-select:none}
+.fc img{width:54px;height:54px;object-fit:contain;border-radius:4px;border:2px solid transparent;transition:all .12s}
+.fc .fn{font-size:8.5px;color:var(--t3);text-align:center;line-height:1.2;
+  max-height:2.4em;overflow:hidden;word-break:keep-all}
+.fc.st-new img{border-color:var(--new)}
+.fc.st-own img{filter:grayscale(1) opacity(.5)}
+/* 제외 = 검정 오버레이. 농도는 --skpop (0~1) 로 조절 */
+.fc.st-skip::after{content:'';position:absolute;top:0;left:4px;width:54px;height:54px;
+  border-radius:4px;background:#000;opacity:var(--skpop);pointer-events:none}
+.fc.st-skip .fn{opacity:.45}
+.fc .tag{position:absolute;top:1px;right:1px;font-size:8px;font-weight:700;
+  border-radius:3px;padding:0 3px;color:#fff;letter-spacing:.02em;z-index:3}
+.fc.st-new .tag{background:var(--new)}
+.fc.st-own .tag{background:var(--own)}
+.fc.st-skip .tag{background:var(--skp)}
+body.skipmode .fc{cursor:pointer}
+body.skipmode .fc:hover img{border-color:var(--skp)}
+body.editmode .fc{cursor:pointer}
+.fc .del{position:absolute;top:-3px;left:-3px;width:16px;height:16px;line-height:14px;text-align:center;
+  background:var(--skp);color:#fff;border-radius:50%;font-size:11px;display:none;z-index:2}
+body.editmode .fc .del{display:block}
+.addbtn{width:54px;height:54px;border:1px dashed var(--line);border-radius:4px;background:none;
+  color:var(--t3);font-size:20px;cursor:pointer;display:none;align-items:center;justify-content:center}
+body.editmode .addbtn{display:flex}
+.addbtn:hover{border-color:var(--acc);color:var(--acc)}
+.bagdel{display:none;background:none;border:none;color:var(--t3);cursor:pointer;font-size:14px;padding:0 2px}
+body.editmode .bagdel{display:block}
+.bagdel:hover{color:var(--skp)}
+
+/* ── 빈 상태 ── */
+.empty{text-align:center;padding:48px 20px;color:var(--t3);font-size:12.5px;line-height:1.9}
+.empty b{color:var(--t1);display:block;font-size:14px;margin-bottom:8px;font-weight:600}
+
+/* ── 모달 ── */
+.mbg{position:fixed;inset:0;background:rgba(20,18,14,.45);display:none;
+  align-items:center;justify-content:center;z-index:100}
+.mbg.open{display:flex}
+.mbox{background:var(--s1);border-radius:10px;width:min(760px,92vw);max-height:82vh;
+  display:flex;flex-direction:column;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.28)}
+.mhd{padding:11px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.mhd h3{font-size:13px;font-weight:600;flex:1}
+.mbody{flex:1;overflow-y:auto;padding:10px}
+.mft{padding:9px 14px;border-top:1px solid var(--line);font-size:11px;color:var(--t3);display:flex;gap:8px;align-items:center}
+
+.toast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);
+  background:var(--t1);color:#fff;padding:8px 16px;border-radius:20px;font-size:12px;
+  opacity:0;pointer-events:none;transition:opacity .2s;z-index:200}
+.toast.show{opacity:.94}
+.spin{display:inline-block;width:11px;height:11px;border:2px solid var(--line);
+  border-top-color:var(--acc);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-1px}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>FGO <span>확챠 플래너</span></h1>
+  <select class="sel" id="region" onchange="changeRegion()">
+    <option value="JP">일본</option>
+    <option value="KR">한국</option>
+  </select>
+  <select class="sel wide" id="evtSel" onchange="changeEvent()">
+    <option value="">확챠 불러오는 중…</option>
+  </select>
+  <button class="btn" onclick="newEvent()" title="빈 확챠 표를 만들어 직접 구성">직접 구성</button>
+  <button class="btn on" id="btnKo" onclick="tglKo()" title="서번트 이름·아이콘을 한국 서버 기준으로 표시">이름 한국어</button>
+  <div class="sep"></div>
+  <button class="btn" onclick="saveFile()" title="보유·제외·확챠 구성을 JSON으로 저장">저장</button>
+  <button class="btn" onclick="document.getElementById('fileIn').click()">불러오기</button>
+  <input type="file" id="fileIn" accept=".json" style="display:none" onchange="loadFile(this)"/>
+  <div class="spacer"></div>
+  <a class="btn navlink" href="index.html">테이블 메이커 →</a>
+  <a class="btn navlink" href="goods.html">소분 →</a>
+</div>
+
+<div class="steps">
+  <button class="step active" id="stp1" onclick="goStep(1)"><span class="num">1</span>보유 체크</button>
+  <button class="step" id="stp2" onclick="goStep(2)"><span class="num">2</span>확챠 표</button>
+</div>
+
+<!-- ══ STEP 1 ══ -->
+<div class="view" id="v1">
+  <div class="bar">
+    <input class="inp" id="q1" placeholder="이름 검색…" oninput="renderSvt()" style="width:150px"/>
+    <div class="sep"></div>
+    <span class="lbl">레어도</span>
+    <span class="chip on" data-r="5" onclick="tglR(5,this)">★5</span>
+    <span class="chip" data-r="4" onclick="tglR(4,this)">★4</span>
+    <span class="chip" data-r="3" onclick="tglR(3,this)">★3</span>
+    <div class="sep"></div>
+    <span class="lbl">클래스</span>
+    <span id="clsChips" style="display:flex;gap:4px;flex-wrap:wrap"></span>
+    <div class="sep"></div>
+    <span class="chip" id="chipOnlyBag" onclick="tglOnlyBag(this)">확챠 대상만</span>
+    <span class="chip" id="chipHideOwn" onclick="tglHideOwn(this)">미보유만</span>
+  </div>
+  <div style="font-size:11px;color:var(--t3);margin:0 2px 8px">
+    클릭 = 미보유 → 보구1 → 2 → 3 → 4 → 5 → 미보유 (한 바퀴). 되돌리려면 우클릭.
+    도감번호(마테리얼) 순으로 정렬돼 있습니다.
+  </div>
+  <div class="sgrid" id="sgrid"><div style="padding:20px;color:var(--t3)"><span class="spin"></span> 서번트 목록 로딩 중…</div></div>
+</div>
+
+<!-- ══ STEP 2 ══ -->
+<div class="view hide" id="v2">
+  <div class="bar">
+    <span class="lbl">열</span>
+    <select class="sel" id="colSel" onchange="applyCols()">
+      <option value="0">자동</option>
+      <option value="1">1</option>
+      <option value="2" selected>2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+    </select>
+    <div class="sep"></div>
+    <span class="lbl">제외 농도</span>
+    <input type="range" id="opRange" min="0" max="100" step="5" value="70"
+           oninput="setOp(this.value)" style="width:104px;accent-color:var(--acc)"/>
+    <span class="lbl" id="opVal" style="width:32px">70%</span>
+    <div class="sep"></div>
+    <button class="btn" id="btnSkip" onclick="tglSkipMode()">뽑기 싫은 서번트 선택</button>
+    <button class="btn" id="btnEdit" onclick="tglEditMode()">확챠 편집</button>
+    <button class="btn sm" id="btnAddBag" onclick="addBag()" style="display:none">+ 복주머니</button>
+    <div class="sep"></div>
+    <button class="btn" onclick="exportPNG()">PNG 저장</button>
+    <div class="spacer"></div>
+    <button class="btn danger" onclick="clearSkip()">제외 초기화</button>
+  </div>
+  <div class="summary" id="summary"></div>
+  <div id="bagWrap"></div>
+</div>
+
+<div class="foot" id="foot">
+  <span class="stat" id="fstat">—</span>
+  <div class="spacer"></div>
+  <button class="btn danger" onclick="clearOwn()">보유 초기화</button>
+  <button class="btn acc" id="btnGo" onclick="goStep(2)">확인 → 확챠 표 보기</button>
+</div>
+
+<!-- 서번트 추가 모달 -->
+<div class="mbg" id="pick" onclick="if(event.target===this)closePick()">
+  <div class="mbox">
+    <div class="mhd">
+      <h3 id="pickTtl">서번트 추가</h3>
+      <input class="inp" id="q2" placeholder="검색…" oninput="renderPick()" style="width:180px"/>
+      <button class="btn sm" onclick="closePick()">닫기</button>
+    </div>
+    <div class="mbody"><div class="sgrid" id="pickGrid"></div></div>
+    <div class="mft"><span id="pickFt">클릭하면 이 복주머니에 추가됩니다</span></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ══════════ STATE ══════════ */
+let region   = 'JP';
+let svtAll   = [];              // {id,no,name,face,rarity,cls}
+let svtById  = new Map();
+let gachaAll = [];              // 복주머니 원본
+let events   = [];              // [{key,label,gachas:[]}]
+let bags     = [];              // [{bid,name,grp:'R'|'W'|'N',ids:[]}]
+let evtLabel = '';
+let own      = {};              // svtId -> np(1~5)
+let skip     = new Set();       // svtId
+let step     = 1;
+let skipMode = false, editMode = false;
+let pickTarget = null;
+let koNames  = true;
+let rFilter  = new Set([5]);
+let cFilter  = new Set();
+let onlyBag  = false, hideOwn = false;
+let bagCnt   = 0;
+
+const CLASSES = [
+  ['saber','세이버'],['archer','아처'],['lancer','랜서'],['rider','라이더'],
+  ['caster','캐스터'],['assassin','어새신'],['berserker','버서커'],
+  ['ruler','룰러'],['avenger','어벤저'],['alterEgo','알터에고'],
+  ['moonCancer','문캔서'],['foreigner','포리너'],['pretender','프리텐더'],['beast','비스트'],
+];
+const LS_OWN='fgo_gp_own_v1', LS_SKIP='fgo_gp_skip_v1', LS_BAGS='fgo_gp_bags_v1',
+      LS_REG='fgo_gp_region_v1', LS_OP='fgo_gp_op_v1', LS_KO='fgo_gp_ko_v1';
+
+/* ══════════ INIT ══════════ */
+window.addEventListener('DOMContentLoaded', init);
+
+async function init(){
+  region = localStorage.getItem(LS_REG) || 'JP';
+  document.getElementById('region').value = region;
+  koNames = localStorage.getItem(LS_KO) !== '0';
+  document.getElementById('btnKo').classList.toggle('on', koNames);
+  restoreLocal();
+  buildClsChips();
+  applyCols();
+  const op = localStorage.getItem(LS_OP) || '70';
+  document.getElementById('opRange').value = op;
+  setOp(op);
+  try{
+    await loadSvt();
+    renderSvt();
+  }catch(e){
+    document.getElementById('sgrid').innerHTML =
+      '<div class="empty"><b>서번트 목록을 불러오지 못했습니다</b>Atlas Academy API 응답이 없습니다. 잠시 뒤 새로고침해 주세요.</div>';
+  }
+  try{ await loadGacha(); }catch(e){
+    document.getElementById('evtSel').innerHTML = '<option value="">확챠 목록 로드 실패</option>';
+  }
+  if(bags.length){ renderBags(); }
+  updFoot();
+}
+
+function restoreLocal(){
+  try{ own  = JSON.parse(localStorage.getItem(LS_OWN)  || '{}'); }catch(e){ own={}; }
+  try{ skip = new Set(JSON.parse(localStorage.getItem(LS_SKIP) || '[]')); }catch(e){ skip=new Set(); }
+  try{
+    const b = JSON.parse(localStorage.getItem(LS_BAGS) || 'null');
+    if(b && b.bags){ bags = b.bags; evtLabel = b.label || ''; bagCnt = bags.length; }
+  }catch(e){}
+}
+function persist(){
+  localStorage.setItem(LS_OWN,  JSON.stringify(own));
+  localStorage.setItem(LS_SKIP, JSON.stringify([...skip]));
+  localStorage.setItem(LS_BAGS, JSON.stringify({label:evtLabel, bags}));
+  localStorage.setItem(LS_REG,  region);
+}
+
+/* ══════════ 데이터 로드 ══════════ */
+async function fetchJSON(url, ms=20000){
+  const c = new AbortController();
+  const t = setTimeout(()=>c.abort(), ms);
+  try{
+    const r = await fetch(url, {signal:c.signal});
+    if(!r.ok) throw new Error(r.status);
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
+
+async function loadSvt(){
+  const j = await fetchJSON(`https://api.atlasacademy.io/export/${region}/basic_svt.json`);
+  // 확챠는 JP 기준이라도 이름·아이콘은 한국 서버 것으로 보여준다(같은 svt id 공유).
+  // 한국 미출시 서번트는 원래 리전 이름 그대로 남는다.
+  let koMap = null;
+  if(koNames && region !== 'KR'){
+    try{
+      const k = await fetchJSON('https://api.atlasacademy.io/export/KR/basic_svt.json');
+      koMap = new Map(k.filter(s => s.collectionNo > 0).map(s => [s.id, s]));
+    }catch(e){ /* 실패해도 원어로 표시 */ }
+  }
+  svtAll = j
+    .filter(s => s.collectionNo > 0 && s.type !== 'servantEquip')
+    .sort((a,b) => a.collectionNo - b.collectionNo)
+    .map(s => {
+      const k = koMap && koMap.get(s.id);
+      return {
+        id: s.id,
+        no: s.collectionNo,
+        name: (k && k.name) || s.name || ('No.' + s.collectionNo),
+        face: (k && k.face) || s.face || `https://static.atlasacademy.io/${region}/Faces/f_${s.id}0.png`,
+        rarity: s.rarity || 0,
+        cls: s.className || '',
+        ko: !!k,
+      };
+    });
+  svtById = new Map(svtAll.map(s => [s.id, s]));
+}
+
+async function tglKo(){
+  koNames = !koNames;
+  localStorage.setItem(LS_KO, koNames ? '1' : '0');
+  document.getElementById('btnKo').classList.toggle('on', koNames);
+  try{ await loadSvt(); renderSvt(); renderBags(); }catch(e){ toast('다시 불러오지 못했습니다'); }
+}
+
+async function loadGacha(){
+  const j = await fetchJSON(`https://api.atlasacademy.io/export/${region}/nice_gacha.json`);
+  gachaAll = j.filter(g =>
+    /복주머니|福袋/.test(g.name || '') &&
+    Array.isArray(g.featuredSvtIds) && g.featuredSvtIds.length > 0
+  );
+  // 개최 기간이 같은 것끼리 하나의 확챠로 묶는다
+  const map = new Map();
+  gachaAll.forEach(g => {
+    const k = g.openedAt + '_' + g.closedAt;
+    if(!map.has(k)) map.set(k, []);
+    map.get(k).push(g);
+  });
+  events = [...map.entries()]
+    .map(([key, gs]) => {
+      gs.sort((a,b) => a.id - b.id);
+      const d = new Date(gs[0].openedAt * 1000);
+      const ymd = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      return { key, opened: gs[0].openedAt, ymd, label: `${ymd} · ${commonPrefix(gs.map(x=>clean(x.name))) || clean(gs[0].name)} (${gs.length}종)`, gachas: gs };
+    })
+    .sort((a,b) => b.opened - a.opened);
+
+  const sel = document.getElementById('evtSel');
+  sel.innerHTML = '<option value="">— 확챠를 고르세요 —</option>' +
+    events.map((e,i) => `<option value="${i}">${esc(e.label)}</option>`).join('');
+
+  // 저장된 표가 없으면 기본 확챠를 자동으로 잡아준다.
+  // 福袋召喚2025(35종, 紅/白 × 카드색 × 보구타입) = 한국 서버 2026 여름 확챠와 같은 구성.
+  if(!bags.length && events.length){
+    let i = events.findIndex(e => /福袋召喚2025/.test(e.label));
+    if(i < 0) i = 0;
+    sel.value = String(i);
+    changeEvent();
+  }
+}
+
+function clean(s){ return (s||'').replace(/[\r\n]+/g,' ').trim(); }
+function commonPrefix(arr){
+  if(!arr.length) return '';
+  let p = arr[0];
+  arr.forEach(s => { let i=0; while(i<p.length && i<s.length && p[i]===s[i]) i++; p = p.slice(0,i); });
+  return p.replace(/[\s(（【･・|]+$/,'').trim();
+}
+
+/* ══════════ 확챠 선택 ══════════ */
+function changeEvent(){
+  const i = document.getElementById('evtSel').value;
+  if(i === '') return;
+  const ev = events[+i];
+  const pre = commonPrefix(ev.gachas.map(g=>clean(g.name)));
+  bagCnt = 0;
+  bags = ev.gachas.map(g => {
+    const nm = clean(g.name);
+    const short = (pre && nm.startsWith(pre) ? nm.slice(pre.length) : nm)
+      .replace(/^[\s(（]+/,'').replace(/[)）]+$/,'').trim() || nm;
+    return { bid: ++bagCnt, name: short, grp: grpOf(nm), ids: g.featuredSvtIds.slice() };
+  });
+  evtLabel = ev.label;
+  persist();
+  renderBags();
+  if(onlyBag) renderSvt();
+  toast(`${bags.length}개 복주머니를 불러왔습니다`);
+}
+
+function grpOf(nm){
+  if(/紅|여성|여자/.test(nm)) return 'R';
+  if(/白|남성|남자/.test(nm)) return 'W';
+  return 'N';
+}
+
+async function changeRegion(){
+  region = document.getElementById('region').value;
+  persist();
+  document.getElementById('sgrid').innerHTML = '<div style="padding:20px;color:var(--t3)"><span class="spin"></span> 로딩 중…</div>';
+  document.getElementById('evtSel').innerHTML = '<option value="">불러오는 중…</option>';
+  try{ await loadSvt(); renderSvt(); }catch(e){ toast('서번트 로드 실패'); }
+  try{ await loadGacha(); }catch(e){ toast('확챠 목록 로드 실패'); }
+  renderBags();
+}
+
+function newEvent(){
+  if(bags.length && !confirm('현재 확챠 표를 지우고 빈 표를 만들까요?')) return;
+  const n = parseInt(prompt('복주머니를 몇 개 만들까요?', '35'), 10);
+  if(!n || n < 1 || n > 200) return;
+  bagCnt = 0;
+  bags = Array.from({length:n}, (_,i) => ({ bid: ++bagCnt, name: `복주머니 ${i+1}`, grp:'N', ids:[] }));
+  evtLabel = '직접 구성';
+  document.getElementById('evtSel').value = '';
+  editMode = true; document.body.classList.add('editmode');
+  document.getElementById('btnEdit').classList.add('on');
+  document.getElementById('btnAddBag').style.display = '';
+  persist(); goStep(2);
+  toast('편집 모드입니다. + 를 눌러 서번트를 넣으세요');
+}
+
+/* ══════════ STEP 1 : 보유 체크 ══════════ */
+function buildClsChips(){
+  document.getElementById('clsChips').innerHTML =
+    CLASSES.map(([k,v]) => `<span class="chip" data-c="${k}" onclick="tglC('${k}',this)">${v}</span>`).join('');
+}
+function tglR(r,el){ rFilter.has(r) ? rFilter.delete(r) : rFilter.add(r); el.classList.toggle('on'); renderSvt(); }
+function tglC(c,el){ cFilter.has(c) ? cFilter.delete(c) : cFilter.add(c); el.classList.toggle('on'); renderSvt(); }
+function tglOnlyBag(el){ onlyBag = !onlyBag; el.classList.toggle('on'); renderSvt(); }
+function tglHideOwn(el){ hideOwn = !hideOwn; el.classList.toggle('on'); renderSvt(); }
+
+function bagIdSet(){
+  const s = new Set();
+  bags.forEach(b => b.ids.forEach(i => s.add(i)));
+  return s;
+}
+
+function filteredSvt(){
+  const q = document.getElementById('q1').value.trim().toLowerCase();
+  const bs = onlyBag ? bagIdSet() : null;
+  return svtAll.filter(s => {
+    if(rFilter.size && !rFilter.has(s.rarity)) return false;
+    if(cFilter.size && !cFilter.has(s.cls)) return false;
+    if(bs && !bs.has(s.id)) return false;
+    if(hideOwn && own[s.id]) return false;
+    if(q && !s.name.toLowerCase().includes(q) && String(s.no) !== q) return false;
+    return true;
+  });
+}
+
+function renderSvt(){
+  const list = filteredSvt();
+  const el = document.getElementById('sgrid');
+  if(!list.length){ el.innerHTML = '<div class="empty">조건에 맞는 서번트가 없습니다</div>'; updFoot(); return; }
+  el.innerHTML = list.map(s => svtCard(s)).join('');
+  updFoot();
+}
+
+function svtCard(s){
+  const np = own[s.id] || 0;
+  return `<div class="sc${np?' owned':''}" data-id="${s.id}"
+      onclick="cycNP(${s.id},1)" oncontextmenu="cycNP(${s.id},-1);return false" title="${esc(s.name)} (No.${s.no})">
+    <span class="no">${s.no}</span>
+    ${np ? `<span class="np${np>=5?' max':''}">NP${np}</span>` : ''}
+    <img src="${s.face}" loading="lazy" crossorigin="anonymous" alt=""/>
+    <span class="nm">${esc(s.name)}</span>
+  </div>`;
+}
+
+function cycNP(id, dir){
+  const cur = own[id] || 0;
+  let nx = cur + dir;
+  if(nx > 5) nx = 0;
+  if(nx < 0) nx = 5;
+  if(nx === 0) delete own[id]; else own[id] = nx;
+  persist();
+  // 카드 하나만 갱신 (전체 리렌더 시 스크롤이 튀는 것 방지)
+  const card = document.querySelector(`.sc[data-id="${id}"]`);
+  const s = svtById.get(id);
+  if(card && s){
+    if(hideOwn && own[id]){ card.remove(); }
+    else card.outerHTML = svtCard(s);
+  }
+  updFoot();
+  if(step === 2) renderBags();
+}
+
+function clearOwn(){
+  if(!confirm('보유 체크를 전부 지울까요?')) return;
+  own = {}; persist(); renderSvt(); renderBags(); toast('보유 체크를 지웠습니다');
+}
+
+function updFoot(){
+  const n = Object.keys(own).length;
+  const np5 = Object.values(own).filter(v => v >= 5).length;
+  document.getElementById('fstat').innerHTML =
+    `보유 <b>${n}</b>기 · 보구5 <b>${np5}</b>기 · 제외 <b>${skip.size}</b>기` +
+    (bags.length ? ` · 복주머니 <b>${bags.length}</b>개` : ' · 확챠 미선택');
+}
+
+/* ══════════ STEP 2 : 복주머니 표 ══════════ */
+function goStep(n){
+  step = n;
+  document.getElementById('stp1').classList.toggle('active', n===1);
+  document.getElementById('stp2').classList.toggle('active', n===2);
+  document.getElementById('v1').classList.toggle('hide', n!==1);
+  document.getElementById('v2').classList.toggle('hide', n!==2);
+  document.getElementById('foot').style.display = n===1 ? '' : 'none';
+  if(n===2) renderBags();
+}
+
+function applyCols(){
+  const c = document.getElementById('colSel').value;
+  document.getElementById('bagWrap').style.gridTemplateColumns =
+    c === '0' ? 'repeat(auto-fill,minmax(340px,1fr))' : `repeat(${c},1fr)`;
+}
+
+function renderBags(){
+  const wrap = document.getElementById('bagWrap');
+  if(!bags.length){
+    wrap.innerHTML = `<div class="empty"><b>확챠 표가 없습니다</b>
+      상단에서 확챠를 고르거나, <b style="display:inline">직접 구성</b> 으로 표를 만드세요.<br>
+      Atlas 데이터에 반영된 확챠만 목록에 나옵니다. 아직 열리지 않은 확챠는 직접 구성으로 넣으면 됩니다.</div>`;
+    document.getElementById('summary').innerHTML = '';
+    return;
+  }
+  wrap.innerHTML = bags.map(b => {
+    const gl = b.grp === 'R' ? 'RED' : b.grp === 'W' ? 'WHITE' : '—';
+    return `<div class="bag" data-bid="${b.bid}">
+      <div class="bag-hd">
+        <span class="grp ${b.grp}" onclick="cycGrp(${b.bid})" title="편집 모드에서 클릭하면 RED/WHITE 전환">${gl}</span>
+        <span class="bag-nm" contenteditable="true" spellcheck="false"
+              onblur="renameBag(${b.bid},this.textContent)">${esc(b.name)}</span>
+        <button class="bagdel" onclick="delBag(${b.bid})" title="이 복주머니 삭제">×</button>
+      </div>
+      <div class="bag-body">
+        ${b.ids.map(id => faceCell(b.bid, id)).join('')}
+        <button class="addbtn" onclick="openPick(${b.bid})" title="서번트 추가">+</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('summary').innerHTML =
+    `${esc(evtLabel || '확챠')} · 복주머니 <span class="hl">${bags.length}</span>개`;
+  updFoot();
+}
+
+function setOp(v){
+  document.documentElement.style.setProperty('--skpop', (v/100).toFixed(2));
+  document.getElementById('opVal').textContent = v + '%';
+  localStorage.setItem(LS_OP, v);
+}
+
+function faceCell(bid, id){
+  const s = svtById.get(id);
+  const face = s ? s.face : `https://static.atlasacademy.io/${region}/Faces/f_${id}0.png`;
+  const nm = s ? s.name : ('#' + id);
+  let st, tag;
+  if(skip.has(id))      { st='st-skip'; tag='제외'; }
+  else if(own[id])      { st='st-own';  tag='NP'+own[id]; }
+  else                  { st='st-new';  tag='NEW'; }
+  return `<div class="fc ${st}" data-id="${id}" onclick="clickFace(${bid},${id})" title="${esc(nm)}">
+    <span class="del" onclick="event.stopPropagation();delSvt(${bid},${id})">×</span>
+    <span class="tag">${tag}</span>
+    <img src="${face}" loading="lazy" crossorigin="anonymous" alt=""/>
+    <span class="fn">${esc(nm)}</span>
+  </div>`;
+}
+
+function clickFace(bid, id){
+  if(editMode) return;              // 편집 모드에선 × 로만 삭제
+  if(!skipMode) return;
+  skip.has(id) ? skip.delete(id) : skip.add(id);
+  persist(); renderBags();
+}
+
+function tglSkipMode(){
+  skipMode = !skipMode;
+  if(skipMode && editMode) tglEditMode();
+  document.body.classList.toggle('skipmode', skipMode);
+  document.getElementById('btnSkip').classList.toggle('on', skipMode);
+  toast(skipMode ? '뽑기 싫은 서번트를 클릭하세요' : '제외 선택을 마쳤습니다');
+}
+function tglEditMode(){
+  editMode = !editMode;
+  if(editMode && skipMode) tglSkipMode();
+  document.body.classList.toggle('editmode', editMode);
+  document.getElementById('btnEdit').classList.toggle('on', editMode);
+  document.getElementById('btnAddBag').style.display = editMode ? '' : 'none';
+}
+function clearSkip(){
+  if(!skip.size) return;
+  if(!confirm('제외 표시를 전부 지울까요?')) return;
+  skip.clear(); persist(); renderBags(); toast('제외를 지웠습니다');
+}
+
+/* ── 편집 ── */
+function renameBag(bid, txt){
+  const b = bags.find(x => x.bid === bid); if(!b) return;
+  const v = (txt||'').trim(); if(!v || v === b.name) return;
+  b.name = v; persist();
+}
+function cycGrp(bid){
+  if(!editMode) return;
+  const b = bags.find(x => x.bid === bid); if(!b) return;
+  b.grp = b.grp === 'R' ? 'W' : b.grp === 'W' ? 'N' : 'R';
+  persist(); renderBags();
+}
+function addBag(){
+  bags.push({ bid: ++bagCnt, name: `복주머니 ${bags.length+1}`, grp:'N', ids:[] });
+  persist(); renderBags();
+}
+function delBag(bid){
+  const b = bags.find(x => x.bid === bid);
+  if(b && b.ids.length && !confirm(`"${b.name}" 을(를) 삭제할까요?`)) return;
+  bags = bags.filter(x => x.bid !== bid);
+  persist(); renderBags();
+}
+function delSvt(bid, id){
+  const b = bags.find(x => x.bid === bid); if(!b) return;
+  const i = b.ids.indexOf(id);
+  if(i >= 0) b.ids.splice(i, 1);
+  persist(); renderBags();
+}
+
+/* ── 서번트 선택 모달 ── */
+function openPick(bid){
+  pickTarget = bid;
+  const b = bags.find(x => x.bid === bid);
+  document.getElementById('pickTtl').textContent = b ? `“${b.name}” 에 추가` : '서번트 추가';
+  document.getElementById('q2').value = '';
+  document.getElementById('pick').classList.add('open');
+  renderPick();
+  setTimeout(()=>document.getElementById('q2').focus(), 30);
+}
+function closePick(){ document.getElementById('pick').classList.remove('open'); pickTarget = null; }
+function renderPick(){
+  const q = document.getElementById('q2').value.trim().toLowerCase();
+  const b = bags.find(x => x.bid === pickTarget);
+  const has = new Set(b ? b.ids : []);
+  let list = svtAll.filter(s => s.rarity >= 4 && !has.has(s.id));
+  if(q) list = list.filter(s => s.name.toLowerCase().includes(q) || String(s.no) === q);
+  else  list = list.filter(s => s.rarity === 5);
+  document.getElementById('pickGrid').innerHTML = list.slice(0,300).map(s =>
+    `<div class="sc" onclick="addSvt(${s.id})" title="${esc(s.name)}">
+      <span class="no">${s.no}</span>
+      <img src="${s.face}" loading="lazy" crossorigin="anonymous" alt=""/>
+      <span class="nm">${esc(s.name)}</span>
+    </div>`).join('') || '<div class="empty">결과 없음</div>';
+  document.getElementById('pickFt').textContent =
+    q ? `${list.length}기 (★4 이상 검색)` : `★5 ${list.length}기 — 검색하면 ★4까지 나옵니다`;
+}
+function addSvt(id){
+  const b = bags.find(x => x.bid === pickTarget); if(!b) return;
+  if(!b.ids.includes(id)) b.ids.push(id);
+  persist(); renderBags(); renderPick();
+}
+
+/* ══════════ 저장 / 불러오기 ══════════ */
+function saveFile(){
+  const payload = { v:1, region, label:evtLabel, own, skip:[...skip], bags, savedAt:new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(payload, null, 1)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `fgo_확챠플래너_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+  toast('JSON으로 저장했습니다');
+}
+function loadFile(input){
+  const f = input.files && input.files[0]; if(!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try{
+      const d = JSON.parse(rd.result);
+      if(d.own)   own = d.own;
+      if(d.skip)  skip = new Set(d.skip);
+      if(d.bags){ bags = d.bags; bagCnt = Math.max(0, ...bags.map(b=>b.bid||0)); }
+      if(d.label) evtLabel = d.label;
+      persist(); renderSvt(); renderBags(); updFoot();
+      toast('불러왔습니다');
+    }catch(e){ toast('파일을 읽지 못했습니다'); }
+    input.value = '';
+  };
+  rd.readAsText(f);
+}
+
+async function exportPNG(){
+  if(!bags.length){ toast('내보낼 표가 없습니다'); return; }
+  const btnStates = [skipMode, editMode];
+  if(skipMode) tglSkipMode();
+  if(editMode) tglEditMode();
+  toast('이미지 만드는 중…');
+  const target = document.getElementById('v2');
+  try{
+    const cv = await html2canvas(target, {
+      backgroundColor:'#f7f5f0', scale:2, useCORS:true, allowTaint:false,
+      windowWidth: target.scrollWidth, height: target.scrollHeight,
+      ignoreElements: el => el.classList && el.classList.contains('bar'),
+    });
+    const a = document.createElement('a');
+    a.href = cv.toDataURL('image/png');
+    a.download = `fgo_확챠_${new Date().toISOString().slice(0,10)}.png`;
+    a.click();
+    toast('PNG를 저장했습니다');
+  }catch(e){
+    toast('이미지 저장 실패 — 이미지 로딩을 기다린 뒤 다시 시도해 주세요');
+  }
+}
+
+/* ══════════ UTIL ══════════ */
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+let tmr;
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(tmr); tmr = setTimeout(()=>t.classList.remove('show'), 2000);
+}
+</script>
+</body>
+</html>
