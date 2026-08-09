@@ -95,20 +95,20 @@ a.navlink{text-decoration:none}
 .np.max{background:var(--acc)}
 
 /* STEP1 그리드 = 이미지만. 카드 여백·테두리 없이 아이콘이 칸을 꽉 채운다 */
-#sgrid{grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:5px}
-#sgrid .sc{padding:0;gap:0;border:0;background:none;border-radius:6px;overflow:hidden}
-#sgrid .sc img{width:100%;height:auto;aspect-ratio:1/1;object-fit:cover;
+.sgrid{grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:5px}
+.sgrid .sc{padding:0;gap:0;border:0;background:none;border-radius:6px;overflow:hidden}
+.sgrid .sc img{width:100%;height:auto;aspect-ratio:1/1;object-fit:cover;
   border-radius:6px;display:block}
-#sgrid .sc:hover{background:none;box-shadow:0 0 0 2px var(--acc)}
-#sgrid .sc .nm,#sgrid .sc .no{display:none}
+.sgrid .sc:hover{background:none;box-shadow:0 0 0 2px var(--acc)}
+.sgrid .sc .nm,.sgrid .sc .no{display:none}
 /* 보구레벨 = 이미지 위에 연한 붉은 막을 덮고 큰 숫자를 가운데 */
-#sgrid .sc.owned{background:none;box-shadow:0 0 0 2px #cf6a72}
-#sgrid .sc.owned img{filter:none}
-#sgrid .np{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+.sgrid .sc.owned{background:none;box-shadow:0 0 0 2px #cf6a72}
+.sgrid .sc.owned img{filter:none}
+.sgrid .np{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   background:rgba(206,38,48,.52);border-radius:6px;padding:0;letter-spacing:0;
   font-size:52px;font-weight:800;line-height:1;color:#fff;
   text-shadow:0 0 4px rgba(130,15,25,.98),0 0 12px rgba(90,10,15,.75),0 2px 5px rgba(0,0,0,.55)}
-#sgrid .np.max{background:rgba(168,128,30,.55);
+.sgrid .np.max{background:rgba(168,128,30,.55);
   text-shadow:0 0 4px rgba(95,72,20,.98),0 0 12px rgba(70,52,12,.75),0 2px 5px rgba(0,0,0,.55)}
 
 /* ── 고정 하단바 ── */
@@ -186,8 +186,8 @@ body.skipmode .fc:hover{box-shadow:inset 0 0 0 3px var(--skp)}
   .bag-nm{font-size:13px}
   .bag-body{gap:3px;padding:5px 6px}
   .view{padding:10px 8px 70px}
-  #sgrid{grid-template-columns:repeat(auto-fill,minmax(78px,1fr))}
-  #sgrid .np{font-size:36px}
+  .sgrid{grid-template-columns:repeat(auto-fill,minmax(78px,1fr))}
+  .sgrid .np{font-size:36px}
 }
 @media (max-width:430px){
   .pngbox .fc{width:86px;height:86px;flex:0 0 86px}
@@ -233,7 +233,7 @@ body.skipmode .fc:hover{box-shadow:inset 0 0 0 3px var(--skp)}
   <a class="btn navlink" href="index.html">테이블 메이커 →</a>
   <a class="btn navlink" href="goods.html">소분 →</a>
   <div class="sep"></div>
-  <button class="btn acc" onclick="exportPNG()" title="확챠표를 이미지로 저장">PNG 저장</button>
+  <button class="btn acc" id="btnPng" onclick="exportPNG()" title="지금 화면을 이미지로 저장">PNG 저장</button>
 </div>
 
 <div class="steps">
@@ -495,6 +495,8 @@ function goStep(n){
   document.getElementById('v1').classList.toggle('hide', n!==1);
   document.getElementById('v2').classList.toggle('hide', n!==2);
   document.getElementById('foot').style.display = n===1 ? '' : 'none';
+  const bp = document.getElementById('btnPng');
+  if(bp) bp.title = n===1 ? '보유 체크한 그대로 이미지로 저장' : '확챠표를 이미지로 저장';
   if(n===2) renderBags();
 }
 
@@ -589,7 +591,61 @@ function loadFile(input){
   input.value='';
 }
 
+/* 만들어 둔 화면 밖 상자를 그림으로 굽는다. 두 내보내기가 같은 처리를 쓴다. */
+async function bakePNG(box, name, maxScale){
+  document.body.appendChild(box);
+  try{
+    // 화면 밖 요소는 lazy 로딩이 영영 시작되지 않아 그대로 두면 무한 대기한다
+    const imgs=[...box.querySelectorAll('img')];
+    imgs.forEach(im => { im.loading='eager'; if(!im.src) im.src=im.getAttribute('src')||''; });
+    await Promise.all(imgs.map(im => im.complete ? null : new Promise(r => {
+      const done=()=>r(); im.onload=done; im.onerror=done; setTimeout(done, 6000);
+    })));
+    // 폰은 캔버스 크기 한계가 있어서 배율을 그대로 두면 아래가 잘려 나온다.
+    const bw = box.offsetWidth, bh = box.offsetHeight;
+    let scale = maxScale || 2;
+    while(scale > 0.5 && (bw*scale > 4000 || bh*scale > 4000 || bw*scale*bh*scale > 12e6)) scale -= 0.25;
+    const cv = await html2canvas(box, {
+      backgroundColor:'#f7f5f0', scale, useCORS:true, allowTaint:false,
+      width: bw, height: bh, windowWidth: bw, windowHeight: bh, scrollX:0, scrollY:0,
+    });
+    if(!cv.width || !cv.height) throw new Error('이미지를 만들지 못했습니다');
+    const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+    if(!blob) throw new Error('이미지를 만들지 못했습니다');
+    await savePNG(blob, name, cv.width, cv.height);
+  }catch(e){
+    toast('이미지 저장 실패 — 잠시 뒤 다시 시도해 주세요');
+  }finally{ box.remove(); }
+}
+
+/* 1단계(보유 체크) 화면을 그대로 저장한다. 확챠 표로 넘어가지 않는다.
+   글자·제목 없이 서번트 칸만 남긴다. */
+async function exportOwnPNG(){
+  const grid = document.getElementById('sgrid');
+  const cards = grid ? grid.querySelectorAll('.sc') : [];
+  if(!cards.length){ toast('내보낼 서번트가 없습니다'); return; }
+  toast('이미지 만드는 중…');
+
+  // 화면 폭에 따라 열이 달라지면 폰에서 세로로 길쭉해진다. 칸 수에 맞춰 가로세로가 고르게.
+  const CW = 104, GAP = 5;
+  const COL = Math.max(8, Math.min(20, Math.round(Math.sqrt(cards.length * 1.4))));
+  const W = COL*CW + (COL-1)*GAP;
+
+  const box = document.createElement('div');
+  box.style.cssText = `position:fixed; left:-99999px; top:0; width:${W+24}px;
+    padding:12px; background:#f7f5f0; box-sizing:border-box;`;
+  const clone = grid.cloneNode(true);
+  clone.removeAttribute('id');
+  clone.style.cssText = `display:grid; gap:${GAP}px; width:${W}px;
+    grid-template-columns:repeat(${COL}, ${CW}px);`;
+  clone.querySelectorAll('.sc').forEach(c => { c.removeAttribute('onclick'); c.removeAttribute('oncontextmenu'); });
+  box.appendChild(clone);
+  // 아이콘은 104px 로도 충분히 또렷하다. 2배로 뽑으면 파일이 17MB 를 넘어 공유가 어렵다.
+  await bakePNG(box, `보유서번트_${new Date().toISOString().slice(0,10)}.png`, 1);
+}
+
 async function exportPNG(){
+  if(step === 1) return exportOwnPNG();
   if(!bags.length){ toast('내보낼 표가 없습니다'); return; }
   if(skipMode) tglSkipMode();
   toast('이미지 만드는 중…');
@@ -616,36 +672,9 @@ async function exportPNG(){
   clone.style.width = W + 'px';
 
   box.appendChild(ttl); box.appendChild(clone);
-  document.body.appendChild(box);
-
-  try{
-    // 화면 밖 요소는 lazy 로딩이 영영 시작되지 않아 그대로 두면 무한 대기한다
-    const imgs=[...clone.querySelectorAll('img')];
-    imgs.forEach(im => { im.loading='eager'; if(!im.src) im.src=im.getAttribute('src')||''; });
-    await Promise.all(imgs.map(im => im.complete ? null : new Promise(r => {
-      const done=()=>r(); im.onload=done; im.onerror=done; setTimeout(done, 6000);
-    })));
-    // 폰은 캔버스 크기 한계가 있어서 배율을 그대로 두면 아래가 잘려 나온다.
-    // 한 변 4000px, 전체 1200만 화소를 넘지 않게 배율을 낮춘다.
-    const bw = box.offsetWidth, bh = box.offsetHeight;
-    let scale = 2;
-    while(scale > 0.5 && (bw*scale > 4000 || bh*scale > 4000 || bw*scale*bh*scale > 12e6)) scale -= 0.25;
-    const cv = await html2canvas(box, {
-      backgroundColor:'#f7f5f0', scale, useCORS:true, allowTaint:false,
-      width: bw, height: bh, windowWidth: bw, windowHeight: bh,
-      scrollX:0, scrollY:0,
-    });
-    if(!cv.width || !cv.height) throw new Error('이미지를 만들지 못했습니다');
-    const name = `복주머니_${new Date().toISOString().slice(0,10)}.png`;
-    const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
-    if(!blob) throw new Error('이미지를 만들지 못했습니다');
-    await savePNG(blob, name, cv.width, cv.height);
-  }catch(e){
-    toast('이미지 저장 실패 — 잠시 뒤 다시 시도해 주세요');
-  }finally{
-    box.remove();
-  }
+  await bakePNG(box, `복주머니_${new Date().toISOString().slice(0,10)}.png`);
 }
+
 
 /* 아이폰 Safari 는 링크의 download 속성을 무시한다. 눌러도 아무 일이 없거나
    사진앱이 아닌 엉뚱한 곳으로 가서 "받았는데 안 보인다"가 된다.
