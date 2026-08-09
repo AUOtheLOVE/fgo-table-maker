@@ -719,6 +719,7 @@ async function exportPNG(){
    ══════════════════════════════════════════════════════════ */
 let REC = null;                       // 인식 모델 (한 번만 받는다)
 const REC_TH = { s1: 0.62, gap: 0.05, card: 0.10 };
+const REC_VER = 'v3 2026-08-09';   // 인식 엔진 버전 (캐시 확인용)
 
 async function loadRecModel(){
   if(REC) return REC;
@@ -955,7 +956,7 @@ function scanShot(cv, prog){
 async function recognizeShots(files){
   const ov=document.getElementById('recOv'); ov.classList.add('open');
   const st=document.getElementById('recSt');
-  st.textContent='인식 모델을 받는 중… (첫 실행만 1.5MB)';
+  st.textContent=`인식 엔진 ${REC_VER} — 모델을 받는 중…`;
   try{ await loadRecModel(); }
   catch(e){ st.textContent='모델을 받지 못했습니다.'; return; }
 
@@ -994,10 +995,12 @@ async function recognizeShots(files){
   persist(); renderSvt(); renderBags(); updFoot();
   ov.classList.remove('open');
   const msg = [
+    `[${REC_VER}]`,
     `캡쳐 ${files.length}장에서 서번트 ${found.size}기를 찾았습니다.`,
     `  새로 추가 ${added}기 · 보구레벨 갱신 ${upd}기`,
     rescued ? `  애매했지만 다른 캡쳐로 확인된 칸 ${rescued}개` : '',
     left.length ? `  끝내 확인 못 한 칸 ${left.length}개 — 직접 눌러주세요` : '',
+    `\n보구레벨 분포  ${[1,2,3,4,5].map(k=>k+':'+[...found.values()].filter(v=>(v.np||1)===k).length).join('  ')}`,
     bad ? `\n인식하지 못한 캡쳐 ${bad}장 (영기일람 화면 전체가 나오게 다시 찍어주세요)` : '',
   ].filter(Boolean).join('\n');
   alert(msg);
