@@ -219,9 +219,6 @@ body.editmode .bagdel{display:block}
     <div class="sep"></div>
     <span class="lbl">클래스</span>
     <span id="clsChips" style="display:flex;gap:4px;flex-wrap:wrap"></span>
-    <div class="sep"></div>
-    <span class="chip" id="chipShowAll" onclick="tglShowAll(this)"
-          title="끄면 지금 고른 확챠에 나오는 서번트만 보입니다">기간한정+통상</span>
   </div>
   <div style="font-size:11px;color:var(--t3);margin:0 2px 8px" id="hint1">
     클릭 = 미보유 → 보구1 → 2 → 3 → 4 → 5 → 미보유 (한 바퀴). 되돌리려면 우클릭.
@@ -303,11 +300,9 @@ let skip     = new Set();       // svtId
 let step     = 1;
 let skipMode = false, editMode = false;
 let pickTarget = null;
-/* 복주머니는 ★5만 나온다. 전체 보기로 전환할 때만 ★4·★3이 필요하다 */
-const RARITY = new Set([5,4,3]);
 let cFilter  = new Set();
-/* 기본은 지금 고른 확챠에 나오는 서번트만 본다. 켜면 통상 포함 전체 */
-let showAll  = false;
+/* ★5 는 기간한정·통상 구분 없이 전부 보여준다.
+   확챠 대상만 걸러도 캡쳐 인식은 통상까지 잡아내므로 숨겨봐야 혼란만 준다. */
 let bagCnt   = 0;
 
 /* 클래스 칩. 엑스트라는 복주머니 확챠가 나누는 방식 그대로 2개로 묶었다.
@@ -405,7 +400,6 @@ function changeEvent(){
   bags = ev.bags.map(b => ({...b, ids:b.ids.slice()}));
   evtLabel = ev.label;
   persist(); renderBags();
-  if(!showAll) renderSvt();
 }
 
 /* ══════════ STEP 1 : 보유 체크 ══════════ */
@@ -414,13 +408,6 @@ function buildClsChips(){
     CLASSES.map(([k,v]) => `<span class="chip" data-c="${k}" onclick="tglC('${k}',this)">${v}</span>`).join('');
 }
 function tglC(c,el){ cFilter.has(c) ? cFilter.delete(c) : cFilter.add(c); el.classList.toggle('on'); renderSvt(); }
-function tglShowAll(el){ showAll = !showAll; el.classList.toggle('on'); renderSvt(); }
-
-function bagIdSet(){
-  const s = new Set();
-  bags.forEach(b => b.ids.forEach(i => s.add(i)));
-  return s;
-}
 
 /* 칩 key는 'ruler|avenger|moonCancer' 처럼 묶여 있어서 실제 className 집합으로 편다 */
 function classSet(){
@@ -431,14 +418,10 @@ function classSet(){
 
 function filteredSvt(){
   const q = document.getElementById('q1').value.trim().toLowerCase();
-  // 확챠를 골랐고 '기간한정+통상'이 꺼져 있으면 그 확챠에 나오는 서번트만
-  const bs = (!showAll && bags.length) ? bagIdSet() : null;
   const cs = cFilter.size ? classSet() : null;
   return svtAll.filter(s => {
-    if(!showAll && s.rarity !== 5) return false;      // 확챠 대상 = ★5
-    if(showAll && !RARITY.has(s.rarity)) return false;
+    if(s.rarity !== 5) return false;
     if(cs && !cs.has(s.cls)) return false;
-    if(bs && !bs.has(s.id)) return false;
     if(q && !s.name.toLowerCase().includes(q) && String(s.no) !== q) return false;
     return true;
   });
