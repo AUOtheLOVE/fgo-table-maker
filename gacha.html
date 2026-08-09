@@ -1015,8 +1015,27 @@ function readRowNP(ctx, G, size, dx, y, ncol, tune){
 }
 
 /* ── 한 장 처리 ── */
+/* 캔버스에서 픽셀을 읽는 건(getImageData) 한 번 한 번이 비싸다.
+   격자를 맞추는 동안 이걸 수만 번 부르면 폰에서는 사실상 멈춘 것처럼 보인다.
+   그래서 사진 전체를 딱 한 번만 읽어 두고, 그 뒤로는 메모리에서 잘라 쓴다. */
+function cachePixels(cv){
+  const W=cv.width, H=cv.height;
+  const all=cv.getContext('2d', {willReadFrequently:true}).getImageData(0,0,W,H).data;
+  return { getImageData(x,y,w,h){
+    x|=0; y|=0; w|=0; h|=0;
+    const out=new Uint8ClampedArray(w*h*4);
+    for(let r=0;r<h;r++){
+      const sy=y+r; if(sy<0||sy>=H) continue;
+      let si=(sy*W+Math.max(x,0))*4, di=(r*w+Math.max(-x,0))*4;
+      const n=Math.min(w+Math.min(x,0), W-Math.max(x,0));
+      for(let k=0;k<n*4;k++) out[di+k]=all[si+k];
+    }
+    return { data:out, width:w, height:h };
+  }};
+}
+
 function scanShot(cv, wide){
-  const ctx=cv.getContext('2d', {willReadFrequently:true});
+  const ctx=cachePixels(cv);
   const G=detectGrid(cv);
   if(!G) return { ok:false, reason:'격자를 찾지 못했습니다' };
   const H=G.H, S=REC.S, box=REC.box;
@@ -1081,10 +1100,20 @@ function scanShot(cv, wide){
       return vals[vals.length>>1];
     };
     let best={sc:lscore(size,dx,y0), size, dx, y0};
-    const dyStep=3, dyMax = wide ? (G.per>>1) : 12;
+    /* 넓게 볼 때는 세로만 한 칸 통째로 훑어 대략적인 위치부터 잡는다.
+       크기·가로까지 한꺼번에 넓히면 경우의 수가 7배가 되어 폰에서 멈춘다. */
+    if(wide){
+      for(let dy=-(G.per>>1); dy<=(G.per>>1); dy+=4){
+        const y=y0+dy;
+        if(y<Math.round(H*0.08)) continue;
+        const t=lscore(size,dx,y);
+        if(t>best.sc) best={sc:t,size,dx,y0:y};
+      }
+      y0=best.y0;
+    }
     for(let sz=G.cw-14; sz<=G.cw+8; sz+=3)
       for(let ddx=-10; ddx<=16; ddx+=3)
-        for(let dy=-dyMax; dy<=dyMax; dy+=(wide?4:dyStep)){
+        for(let dy=-12; dy<=12; dy+=3){
           const y=y0+dy;
           if(y<Math.round(H*0.08)) continue;
           const t=lscore(sz,ddx,y);
