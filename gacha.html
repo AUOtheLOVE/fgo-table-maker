@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>확챠 플래너</title>
+<title>한그오 2025 여름확챠</title>
 <meta name="description" content="복주머니 확챠 플래너. 보유 서번트와 보구레벨을 체크하면 각 복주머니의 신규 획득률을 계산해 어디를 돌릴지 알려줍니다."/>
 <meta property="og:type" content="website"/>
-<meta property="og:site_name" content="FGO 확챠 플래너"/>
-<meta property="og:title" content="확챠 플래너"/>
+<meta property="og:site_name" content="한그오 확챠 플래너"/>
+<meta property="og:title" content="한그오 2025 여름확챠"/>
 <meta property="og:description" content="보유 체크 → 복주머니별 신규 획득률 자동 계산."/>
 <meta property="og:url" content="https://ryuri-r.github.io/fgo-table-maker/gacha.html"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -192,11 +192,7 @@ body.editmode .bagdel{display:block}
 <body>
 
 <div class="topbar">
-  <h1>FGO <span>확챠 플래너</span></h1>
-  <select class="sel" id="region" onchange="changeRegion()">
-    <option value="JP">일본</option>
-    <option value="KR">한국</option>
-  </select>
+  <h1>한그오 <span>2025 여름확챠</span></h1>
   <select class="sel wide" id="evtSel" onchange="changeEvent()">
     <option value="">확챠 불러오는 중…</option>
   </select>
@@ -327,8 +323,6 @@ const LS_OWN='fgo_gp_own_v1', LS_SKIP='fgo_gp_skip_v1', LS_BAGS='fgo_gp_bags_v1'
 window.addEventListener('DOMContentLoaded', init);
 
 async function init(){
-  region = localStorage.getItem(LS_REG) || 'JP';
-  document.getElementById('region').value = region;
   koNames = localStorage.getItem(LS_KO) !== '0';
   document.getElementById('btnKo').classList.toggle('on', koNames);
   restoreLocal();
@@ -417,26 +411,50 @@ async function tglKo(){
 }
 
 async function loadGacha(){
-  const j = await fetchJSON(`https://api.atlasacademy.io/export/${region}/nice_gacha.json`);
-  gachaAll = j.filter(g =>
-    /복주머니|福袋/.test(g.name || '') &&
-    Array.isArray(g.featuredSvtIds) && g.featuredSvtIds.length > 0
-  );
-  // 개최 기간이 같은 것끼리 하나의 확챠로 묶는다
+  // 한국 서버 확챠가 우선이지만, 아직 안 열린 확챠는 한국 데이터에 없다.
+  // 그럴 땐 같은 구성으로 먼저 열린 일본 확챠를 빌려 쓴다. (svt id는 리전 공통)
+  const now = Date.now() / 1000;
+  const raw = [];
+  for(const rg of ['KR','JP']){
+    try{
+      const j = await fetchJSON(`https://api.atlasacademy.io/export/${rg}/nice_gacha.json`);
+      j.forEach(g => {
+        if(/복주머니|福袋/.test(g.name || '') &&
+           Array.isArray(g.featuredSvtIds) && g.featuredSvtIds.length > 0){
+          raw.push({ ...g, _rg: rg });
+        }
+      });
+    }catch(e){ /* 한쪽이 죽어도 나머지로 진행 */ }
+  }
+  gachaAll = raw;
+
+  // 서버 + 개최기간이 같은 것끼리 하나의 확챠로 묶는다
   const map = new Map();
-  gachaAll.forEach(g => {
-    const k = g.openedAt + '_' + g.closedAt;
+  raw.forEach(g => {
+    const k = g._rg + '_' + g.openedAt + '_' + g.closedAt;
     if(!map.has(k)) map.set(k, []);
     map.get(k).push(g);
   });
-  events = [...map.entries()]
-    .map(([key, gs]) => {
-      gs.sort((a,b) => a.id - b.id);
-      const d = new Date(gs[0].openedAt * 1000);
-      const ymd = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-      return { key, opened: gs[0].openedAt, ymd, label: `${ymd} · ${commonPrefix(gs.map(x=>clean(x.name))) || clean(gs[0].name)} (${gs.length}종)`, gachas: gs };
-    })
-    .sort((a,b) => b.opened - a.opened);
+
+  const all = [...map.entries()].map(([key, gs]) => {
+    gs.sort((a,b) => a.id - b.id);
+    const d = new Date(gs[0].openedAt * 1000);
+    const ymd = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const name = commonPrefix(gs.map(x => clean(x.name))) || clean(gs[0].name);
+    const isPreset = gs[0]._rg === 'JP' && /福袋召喚2025/.test(name);
+    return {
+      key, gachas: gs, rg: gs[0]._rg, opened: gs[0].openedAt, closed: gs[0].closedAt, isPreset,
+      label: isPreset
+        ? `한그오 2025 여름확챠 (${gs.length}종)`
+        : `${gs[0]._rg === 'KR' ? '한국' : '일본'} · ${ymd} · ${name} (${gs.length}종)`,
+    };
+  });
+
+  // 이미 끝난 확챠는 목록에서 뺀다. 단 기본 확챠는 남긴다
+  // (한국에서 곧 열릴 것이라 일본 기준으론 이미 지난 확챠다)
+  events = all
+    .filter(e => e.isPreset || e.closed >= now)
+    .sort((a,b) => (b.isPreset - a.isPreset) || (b.opened - a.opened));
 
   const sel = document.getElementById('evtSel');
   sel.innerHTML = '<option value="">— 확챠를 고르세요 —</option>' +
@@ -444,12 +462,7 @@ async function loadGacha(){
 
   if(!events.length) return;
 
-  // 기본 확챠 = 福袋召喚2025 (35종, 紅/白 × 카드색 × 보구타입).
-  // 한국 서버에서 곧 열리는 2026 여름 확챠가 이것과 같은 구성이다.
-  const defIdx = (() => {
-    const i = events.findIndex(e => /福袋召喚2025/.test(e.label));
-    return i < 0 ? 0 : i;
-  })();
+  const defIdx = Math.max(0, events.findIndex(e => e.isPreset));
 
   // 저장된 표가 있으면 그게 어느 확챠였는지 찾아 드롭다운을 맞춰준다.
   // (안 맞춰주면 표는 떠 있는데 선택창만 비어 보여서 안 고른 것처럼 보인다)
@@ -497,16 +510,6 @@ function grpOf(nm){
   if(/紅|여성|여자/.test(nm)) return 'R';
   if(/白|남성|남자/.test(nm)) return 'W';
   return 'N';
-}
-
-async function changeRegion(){
-  region = document.getElementById('region').value;
-  persist();
-  document.getElementById('sgrid').innerHTML = '<div style="padding:20px;color:var(--t3)"><span class="spin"></span> 로딩 중…</div>';
-  document.getElementById('evtSel').innerHTML = '<option value="">불러오는 중…</option>';
-  try{ await loadSvt(); renderSvt(); }catch(e){ toast('서번트 로드 실패'); }
-  try{ await loadGacha(); }catch(e){ toast('확챠 목록 로드 실패'); }
-  renderBags();
 }
 
 function newEvent(){
