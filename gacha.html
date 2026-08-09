@@ -654,8 +654,14 @@ async function exportPNG(){
    여러 장을 한 번에 올려도 되고, 겹친 줄은 서번트 ID로 자동 합쳐진다.
    ══════════════════════════════════════════════════════════ */
 let REC = null;                       // 인식 모델 (한 번만 받는다)
-const REC_TH = { s1: 0.62, gap: 0.05, card: 0.10 };
-const REC_VER = 'v9 2026-08-09';   // 인식 엔진 버전 (캐시 확인용)
+// 실측 근거: 격자가 제대로 맞은 칸 329개의 s1 최소 0.880, gap 최소 0.110.
+// 반면 화면에 가려 검증 불가한 칸들이 0.63~0.75 로 통과하고 있었다.
+const REC_TH = { s1: 0.75, gap: 0.08, card: 0.10, s1Lo: 0.55, gapHi: 0.15 };
+/* 게임 상단 UI에 가리거나 아래가 잘린 카드는 점수가 통째로 내려앉는다.
+   그래도 2등을 크게 따돌렸다면(gap 0.15) 낮은 점수라도 받는다.
+   실측: 확인된 112기·61기 세트에서 가짜는 0건, 놓치던 서번트 3기를 되찾았다. */
+const isSure = c => (c.s1>=REC_TH.s1 && c.gap>=REC_TH.gap) || (c.s1>=REC_TH.s1Lo && c.gap>=REC_TH.gapHi);
+const REC_VER = 'v12 2026-08-09';   // 인식 엔진 버전 (캐시 확인용)
 
 async function loadRecModel(){
   if(REC) return REC;
@@ -799,22 +805,6 @@ function cardPresence(ctx,x,y,size,vish){
   return tot ? hit/tot : 0;
 }
 
-/* 서번트 카드인가 — 상단 보구Lv 바가 어두운지로 판별한다.
-   Exp.UP(종화) 카드는 그 자리가 밝은 금색 별이라 확실히 갈린다.
-   실측: 서번트 카드 236칸의 어두운 비율 중앙값 0.51, 최저 0.09 / 임계 0.20이면 1칸만 놓친다. */
-function isServantCard(ctx,x,y,size,vish){
-  const l=x+(0.28*size|0), r=x+(0.72*size|0);
-  const t=y+(0.055*size|0), b=y+Math.min(0.17*size|0, vish);
-  if(r-l<4 || b-t<3) return true;                 // 판별 불가하면 통과시킨다
-  const im=ctx.getImageData(l,t,r-l,b-t).data;
-  let dark=0, n=0;
-  for(let i=0;i<im.length;i+=8){                  // 2픽셀 간격 표본
-    const lum=im[i]*0.299+im[i+1]*0.587+im[i+2]*0.114;
-    if(lum<110) dark++; n++;
-  }
-  return n ? dark/n >= 0.20 : true;
-}
-
 /* ── 카드 얼굴 → 특징 벡터 ──
    축소는 캔버스에 맡기지 않고 직접 면적 평균한다.
    브라우저마다 drawImage 축소 필터가 달라서, 맡기면 같은 사진도 기기마다 값이 달라진다.
@@ -852,17 +842,19 @@ function faceVec(ctx, x, y, cs, vish, S, box){
   if(b-t<6 || r-l<6) return null;
   return normalize(boxDown(ctx, l, t, r-l, b-t, S, S, 3));
 }
-/* 벡터 하나를 전체 레퍼런스와 대조 → 1등·2등(다른 서번트) */
+/* 벡터 하나를 전체 레퍼런스와 대조 → 1등·2등(다른 서번트).
+   id 가 음수인 항목은 '서번트가 아닌 카드'(Exp.UP 등) 템플릿이다.
+   실측: Exp 카드가 길가메쉬와 0.685 로 붙어 문턱을 넘었다. 거부 템플릿은 1.0 이라 항상 이긴다. */
 function matchFace(v, stride){
   const {M,ids,dim}=REC, n=ids.length;
   let b1=-2,i1=-1,b2=-2;
   for(let i=0;i<n;i+= (stride||1)){
     const o=i*dim; let s=0;
     for(let j=0;j<dim;j++) s+=M[o+j]*v[j];
-    if(s>b1){ if(ids[i1]!==ids[i]) b2=b1; b1=s; i1=i; }
-    else if(s>b2 && ids[i]!==ids[i1]) b2=s;
+    if(s>b1){ if(ids[i1]!==ids[i] && ids[i1]>=0) b2=Math.max(b2,b1); b1=s; i1=i; }
+    else if(s>b2 && ids[i]!==ids[i1] && ids[i]>=0) b2=s;   // 거부 템플릿은 2등에서 뺀다
   }
-  return { id: ids[i1], s1: b1, gap: b1-b2 };
+  return { id: ids[i1], idx: i1, s1: b1, gap: b1-b2 };
 }
 /* ── 보구 숫자 ──
    숫자칸은 20x27px 남짓이라 정렬에 아주 예민하다. 4px만 어긋나도 전부 오독한다.
@@ -958,41 +950,92 @@ function readRowNP(ctx, G, size, dx, y, ncol, tune){
 }
 
 /* ── 한 장 처리 ── */
-function scanShot(cv, prog){
+function scanShot(cv, wide){
   const ctx=cv.getContext('2d', {willReadFrequently:true});
   const G=detectGrid(cv);
   if(!G) return { ok:false, reason:'격자를 찾지 못했습니다' };
   const H=G.H, S=REC.S, box=REC.box;
+  // 1단계 — 행 위상만 거칠게 잡는다 (여기서는 표본추출을 써도 무방)
   const rowScore=(size,dx,yy,maxRows)=>{
     let tot=0,k=0;
     for(let y=yy; y+size<=H && k<maxRows; y+=G.per){
       for(let c=0;c<G.ncol;c++){
         const v=faceVec(ctx, G.x0+dx+c*G.pitch, y, size, size, S, box);
-        if(v) tot+=matchFace(v, 4).s1;      // 보정 단계는 1/4만 훑어 빠르게
+        if(v) tot+=matchFace(v,4).s1;
       }
       k++;
     }
     return k? tot/k : -9;
   };
-  // 1단계 행 위상 — 한 주기를 훑되 여러 행 점수를 합산한다.
-  // 한 행만 보면 배경이 우연히 맞아 엉뚱한 위치에 고정되는 일이 생긴다.
   const s0=G.cw-4; let yb=Math.round(H*0.12), bA=-9;
   for(let y=Math.round(H*0.11); y<Math.round(H*0.11)+G.per; y+=3){
     if(y+s0>H) break;
     const t=rowScore(s0,4,y,3);
     if(t>bA){ bA=t; yb=y; }
   }
-  // 2단계 크기·오프셋
-  let best={sc:-9,size:s0,dx:4,y0:yb};
-  for(let size=G.cw-10; size<=G.cw+4; size+=3)
-   for(let dx=-6; dx<=14; dx+=3)
-    for(let dy=-6; dy<=6; dy+=3){
-      const y=yb+dy;
-      if(y<Math.round(H*0.09) || y+size>H) continue;
-      const t=rowScore(size,dx,y,2);
-      if(t>best.sc) best={sc:t,size,dx,y0:y};
+  let size=s0, dx=4, y0=yb;
+
+  /* 2단계 — 칸마다 '가장 맞는 템플릿'을 먼저 고정하고, 그 템플릿 하나와의 NCC 로만
+     (크기·가로·세로)를 다시 맞춘다.
+     전체에서 1/4 만 추려 점수를 내면, 템플릿이 서번트당 재림 4개씩 붙어 있어서
+     서번트마다 같은 재림만 뽑히고 화면 카드가 다른 재림일 때 정렬돼도 점수가 오르지 않는다.
+     실측: 이 때문에 한 장에서 격자가 7~8px 어긋난 채로 수렴해 18칸 중 10칸을 놓쳤다. */
+  const REJ = REC.ids.map((v,i)=>v<0?i:-1).filter(i=>i>=0);   // 종화 등 '서번트 아님' 템플릿
+  const dot=(idx,v)=>{ const o=idx*REC.dim; let d=0; for(let j=0;j<REC.dim;j++) d+=REC.M[o+j]*v[j]; return d; };
+  for(let it=0; it<3; it++){
+    const locked=[]; let k=0;
+    for(let y=y0; y<H && k<3; y+=G.per){
+      const vh=Math.min(H,y+size)-y;
+      if(vh < size*0.45) break;
+      for(let c=0;c<G.ncol;c++){
+        const v=faceVec(ctx, G.x0+dx+c*G.pitch, y, size, vh, S, box);
+        if(!v) continue;
+        const m=matchFace(v);
+        if(m.s1>=0.30) locked.push({k, c, idx:m.idx});
+      }
+      k++;
     }
-  const {size,dx,y0}=best, out=[]; let cut=0, notSvt=0;
+    if(!locked.length) break;
+    /* 칸마다 고정 템플릿과의 점수. 종화처럼 서번트가 아닌 카드로 화면이 꽉 차면
+       고정 템플릿이 전부 헛것이라 정렬이 무너지므로, '서번트 아님' 템플릿도 후보에 넣는다.
+       평균 대신 중앙값 — 몇 칸이 튀어도 정렬 기준이 흔들리지 않는다. */
+    const lscore=(sz,ddx,yy)=>{
+      const vals=[];
+      for(const L of locked){
+        const y=yy+L.k*G.per;
+        const vh=Math.min(H,y+sz)-y;
+        if(vh < sz*0.45) continue;
+        const v=faceVec(ctx, G.x0+ddx+L.c*G.pitch, y, sz, vh, S, box);
+        if(!v) continue;
+        let d=dot(L.idx, v);
+        for(const r of REJ){ const t=dot(r,v); if(t>d) d=t; }
+        vals.push(d);
+      }
+      if(!vals.length) return -9;
+      vals.sort((a,b)=>a-b);
+      return vals[vals.length>>1];
+    };
+    let best={sc:lscore(size,dx,y0), size, dx, y0};
+    const dyStep=3, dyMax = wide ? (G.per>>1) : 12;
+    for(let sz=G.cw-14; sz<=G.cw+8; sz+=3)
+      for(let ddx=-10; ddx<=16; ddx+=3)
+        for(let dy=-dyMax; dy<=dyMax; dy+=(wide?4:dyStep)){
+          const y=y0+dy;
+          if(y<Math.round(H*0.08)) continue;
+          const t=lscore(sz,ddx,y);
+          if(t>best.sc) best={sc:t,size:sz,dx:ddx,y0:y};
+        }
+    for(let sz=best.size-2; sz<=best.size+2; sz++)        // 1px 미세 조정
+      for(let ddx=best.dx-2; ddx<=best.dx+2; ddx++)
+        for(let dy=best.y0-2; dy<=best.y0+2; dy++){
+          if(dy<Math.round(H*0.08)) continue;
+          const t=lscore(sz,ddx,dy);
+          if(t>best.sc) best={sc:t,size:sz,dx:ddx,y0:dy};
+        }
+    size=best.size; dx=best.dx; y0=best.y0;
+  }
+
+  const out=[]; let cut=0, notSvt=0;
   // 숫자 정렬은 앞쪽 여러 행을 함께 보고 한 번만 정한다
   const tuneRows=[];
   for(let y=y0; y<H && tuneRows.length<3; y+=G.per){
@@ -1004,26 +1047,31 @@ function scanShot(cv, prog){
     if(vish/size < 0.45){ cut++; continue; }   // 너무 잘린 행 — 조용히 버리지 않고 센다
     // 보구Lv 는 카드 위쪽(0.05~0.165)이라 아래가 잘려도 숫자는 남는다.
     // 정렬 자체가 형편없으면 숫자를 읽지 않는다 (엉뚱한 값을 넣느니 기존 값을 유지)
-    let npCells = (vish >= size*0.20 && dTune.conf >= 0.40)
-      ? readRowNP(ctx, G, size, dx, y, G.ncol, dTune) : null;
-    if(npCells){
+    // 행 간격이 미세하게 어긋나 아래로 갈수록 숫자칸이 밀린다. 행마다 세로만 다시 맞춘다.
+    let npCells = null;
+    if(vish >= size*0.20 && dTune.conf >= 0.40){
+      let bestM=-1;
+      // 세로만 맞추면 오른쪽 열로 갈수록 가로가 밀린다(실측: 오독 20건 중 13건이 우측 열).
+      for(let dxo=-2; dxo<=2; dxo++)
+      for(let d=-5; d<=5; d++){
+        const r = readRowNP(ctx, G, size, dx, y, G.ncol, {...dTune, ox:dTune.ox+dxo, oy:dTune.oy+d});
+        const m = r.reduce((a,z)=>a+z.conf,0)/r.length;
+        if(m>bestM){ bestM=m; npCells=r; }
+      }
       // 이 행 자체가 흐리면(상단 UI에 가림 등) 숫자를 쓰지 않는다.
-      // 서번트는 계속 인식하고 보구만 기존 값을 유지시킨다.
-      const m = npCells.reduce((a,z)=>a+z.conf,0)/npCells.length;
-      if(m < 0.40) npCells = null;
+      if(bestM < 0.40) npCells = null;
     }
     for(let c=0;c<G.ncol;c++){
       const x=G.x0+dx+c*G.pitch;
       if(x+size>cv.width) continue;
       if(cardPresence(ctx,x,y,size,vish) < REC_TH.card) continue;
-      if(!isServantCard(ctx,x,y,size,vish)){ notSvt++; continue; }   // Exp.UP 등
       const v=faceVec(ctx,x,y,size,vish,S,box);
       if(!v) continue;
       const m=matchFace(v);
+      if(m.id < 0){ notSvt++; continue; }   // Exp.UP 등 서번트가 아닌 카드
       const np=(npCells && npCells[c]) ? npCells[c] : {np:0,conf:0};
       out.push({ ...m, np:np.np, npConf:np.conf, x, y, size, vis:vish/size });
     }
-    if(prog) prog();
   }
   fixNPSpikes(out);
   return { ok:true, cells:out, cut, notSvt, grid:{...G,size,dx,y0}, dTune };
@@ -1037,13 +1085,48 @@ function fixNPSpikes(cells){
   if(a.length<5) return;
   let asc=0, desc=0;
   for(let i=1;i<a.length;i++){ if(a[i].np>a[i-1].np) asc++; else if(a[i].np<a[i-1].np) desc++; }
-  if(Math.max(asc,desc) < a.length*0.05) return;      // 정렬 안 된 화면이면 손대지 않는다
-  for(let i=1;i<a.length-1;i++){
-    const p=a[i-1].np, c=a[i].np, n=a[i+1].np;
-    if(p===n && c!==p && a[i].npConf < 0.85){         // 확신이 아주 높으면 건드리지 않는다
-      a[i].np=p; a[i].npFixed=true;
+  // 보구순으로 정렬된 화면만 손댄다. 한 방향이 압도적이어야 한다.
+  // (예전 조건 max(asc,desc) >= 5% 는 사실상 항상 참이라, 정렬 안 된 화면에서
+  //  멀쩡한 값을 장당 평균 3칸씩 망가뜨릴 수 있었다.)
+  // 뒤섞인 화면은 손대지 않는다. 정렬 안 된 목록이면 오르내림이 반반이라 이 문턱을 넘는다.
+  if(Math.min(asc,desc) > Math.max(2, a.length*0.2)) return;
+  /* 1차 — 앞뒤 2칸씩(총 5칸)의 중앙값. 혼자 튀는 칸, 특히 맨 앞뒤를 잡는다.
+     원본을 따로 두고 읽어야 고친 값이 다음 칸 판단에 섞이지 않는다. */
+  {
+    const base=a.map(c=>c.np);
+    for(let i=0;i<a.length;i++){
+      if(a[i].npConf >= 0.85) continue;               // 확신이 아주 높으면 건드리지 않는다
+      const w=base.slice(Math.max(0,i-2), Math.min(base.length,i+3)).sort((x,y)=>x-y);
+      const m=w[w.length>>1];
+      if(m!==a[i].np){ a[i].np=m; a[i].npFixed=true; }
     }
   }
+  /* 2차 — 영기일람을 보구Lv 순으로 정렬해 두면 값이 한 방향으로만 간다.
+     그 순서를 반드시 지키는 값들 중, 원래 읽은 값과 가장 적게 어긋나는 조합을 고른다.
+     (어긋남의 무게 = 그 칸을 읽을 때의 확신도. 흐리게 읽은 칸부터 굽는다.)
+     중앙값 보정은 확신 있게 틀린 칸을 못 고쳤다 — 실측에서 한 줄에 4칸이 남았다. */
+  let asc2=0, desc2=0;
+  for(let i=1;i<a.length;i++){ if(a[i].np>a[i-1].np) asc2++; else if(a[i].np<a[i-1].np) desc2++; }
+  if(Math.min(asc2,desc2) > 1) return;                // 1차 후에도 뒤섞였으면 정렬된 화면이 아니다
+  const n=a.length, V=5, down = desc2>=asc2;
+  const cost=(i,v)=> a[i].np===v ? 0 : Math.max(a[i].npConf, 0.05);
+  const dp=[], bk=[];
+  for(let i=0;i<n;i++){ dp.push(new Float64Array(V+1).fill(Infinity)); bk.push(new Int8Array(V+1)); }
+  for(let v=1;v<=V;v++) dp[0][v]=cost(0,v);
+  for(let i=1;i<n;i++)
+    for(let v=1;v<=V;v++){
+      let best=Infinity, arg=v;
+      // 내림차순이면 앞 칸이 나보다 크거나 같아야 한다 (오름차순이면 반대)
+      for(let p=1;p<=V;p++){
+        if(down ? p<v : p>v) continue;
+        if(dp[i-1][p]<best){ best=dp[i-1][p]; arg=p; }
+      }
+      dp[i][v]=best+cost(i,v); bk[i][v]=arg;
+    }
+  let v=1; for(let u=2;u<=V;u++) if(dp[n-1][u]<dp[n-1][v]) v=u;
+  const fit=new Array(n);
+  for(let i=n-1;i>=0;i--){ fit[i]=v; v=bk[i][v]||v; }
+  for(let i=0;i<n;i++) if(fit[i]!==a[i].np){ a[i].np=fit[i]; a[i].npFixed=true; }
 }
 
 /* ── 진입점 ── */
@@ -1064,25 +1147,35 @@ async function recognizeShots(files){
     await new Promise(r=>setTimeout(r,10));
     let cv;
     try{ cv = toCanvas(await loadImg(files[i])); }catch(e){ bad++; continue; }
-    const r = scanShot(cv);
+    let r = scanShot(cv);
+    const okOf = x => x && x.cells ? x.cells.filter(isSure).length : -1;
+    // 종화(Exp.UP)가 화면을 채우면 기준점을 잡을 데가 없어 정렬이 한 칸씩 밀린다.
+    // 결과가 나쁠 때만 세로 탐색을 한 칸 통째로 넓혀 다시 시도한다 (평소엔 느려지지 않게).
+    if(r.ok && r.cells.length && okOf(r) < r.cells.length*0.5){
+      const r2 = scanShot(cv, true);
+      if(r2.ok && okOf(r2) > okOf(r)) r = r2;
+    }
     if(!r.ok){ bad++; continue; }
-    // 카드의 절반 이상이 낮은 점수면 이 장은 신뢰하지 않는다
-    const okCnt = r.cells.filter(c => c.s1>=REC_TH.s1).length;
+    const okCnt = r.cells.filter(isSure).length;
     if(r.cells.length && okCnt < r.cells.length*0.5){ bad++; continue; }
     cutRows += r.cut||0; notSvtTotal += r.notSvt||0;
+    /* 한 장 안에서 같은 서번트가 여러 칸에 나오면 '진짜로 여러 장 보유'다.
+       보구는 합쳐진 장수이므로 보구를 더한다 (보1 + 보1 = 보2).
+       캡쳐끼리는 겹쳐 찍힐 수 있으니 더하지 않는다. 대신 '가장 선명하게 읽힌 장'을 쓴다.
+       (큰 쪽을 쓰면 어느 한 장의 오독이 영구히 눌러앉는다 — 실측으로 확인됨) */
+    const perShot = new Map();
     r.cells.forEach(c => {
-      const strong = c.s1>=REC_TH.s1 && c.gap>=REC_TH.gap;
-      const cur = found.get(c.id);
-      if(strong){
-        // 한 번의 인식 안에서 같은 서번트가 여러 칸에 나오면 '가장 높은 보구'를 쓴다.
-        // 같은 서번트를 여러 장 가진 경우(예: 보5·보5·보1·보1·보1)가 있고,
-        // 복주머니 판단에는 가장 높은 것이 기준이기 때문이다.
-        if(!cur) found.set(c.id, { reads:[{np:c.np,conf:c.npConf}], s1:c.s1, gap:c.gap });
-        else {
-          cur.reads.push({np:c.np, conf:c.npConf});
-          if(c.s1 > cur.s1){ cur.s1 = c.s1; cur.gap = c.gap; }
-        }
+      if(isSure(c)){
+        const d = perShot.get(c.id) || {sum:0, conf:1, s1:0, gap:0};
+        d.sum += (c.np > 0 ? c.np : 1);   // 보유는 확실, 숫자만 못 읽으면 최소 1장
+        d.conf = Math.min(d.conf, c.np>0 ? c.npConf : 0);   // 가장 흐린 칸이 그 장의 신뢰도
+        if(c.s1 > d.s1){ d.s1=c.s1; d.gap=c.gap; }
+        perShot.set(c.id, d);
       } else weak.push(c);
+    });
+    perShot.forEach((d,id) => {
+      const cur = found.get(id);
+      if(!cur || d.conf > cur.conf || (d.conf === cur.conf && d.sum > cur.sum)) found.set(id, d);
     });
   }
   // 확신 없던 칸도 다른 장에서 확정됐으면 살린다
@@ -1090,19 +1183,17 @@ async function recognizeShots(files){
   const left    = weak.filter(c => !found.has(c.id));
 
   let added=0, upd=0;
-  let lowRarity = 0;
+  let lowRarity = 0, noNP = 0;
   found.forEach((v,id) => {
     // 전 레어도로 대조해야 ★4가 엉뚱한 ★5로 붙는 걸 막는다. 다만 저장은 ★5만 한다.
     if((svtById.get(id)||{}).rarity !== 5){ lowRarity++; return; }
-    // 같은 서번트를 여러 장 가질 수 있으니 최댓값을 쓰되,
-    // 흐릿하게 읽힌 값이 최댓값을 밀어올리지 못하게 확신도 바닥을 둔다.
-    const rs = v.reads.filter(r => r.np > 0);
-    const good = rs.filter(r => r.conf >= 0.55);
-    const pick = good.length ? Math.max(...good.map(r=>r.np))
-               : (rs.slice().sort((a,b)=>b.conf-a.conf)[0]||{}).np || 0;
-    const np = pick || own[id] || 1;
-    if(!own[id]) added++; else if(own[id] !== np) upd++;
-    own[id] = np;                      // 이번에 본 값으로 덮어쓴다 (다시 올리면 고쳐진다)
+    const pick = Math.min(5, v.sum);    // 보유 장수의 합, 보구5가 상한
+    if(!pick){
+      if(!own[id]){ own[id]=1; added++; noNP++; }
+      return;
+    }
+    if(!own[id]) added++; else if(own[id] !== pick) upd++;
+    own[id] = pick;                    // 이번에 본 값으로 덮어쓴다 (다시 올리면 고쳐진다)
   });
   persist(); renderSvt(); renderBags(); updFoot();
   const msg = [
@@ -1110,6 +1201,7 @@ async function recognizeShots(files){
     `캡쳐 ${files.length}장에서 ★5 ${found.size-lowRarity}기를 찾았습니다.`,
     `  새로 추가 ${added}기 · 보구레벨 갱신 ${upd}기`,
     notSvtTotal ? `  서번트가 아닌 카드 ${notSvtTotal}칸 제외 (Exp.UP 등)` : '',
+    noNP ? `  보구레벨을 못 읽어 1로 둔 서번트 ${noNP}기 — 직접 확인해 주세요` : '',
     lowRarity ? `  (★4 이하 ${lowRarity}기는 복주머니 대상이 아니라 제외)` : '',
     rescued ? `  애매했지만 다른 캡쳐로 확인된 칸 ${rescued}개` : '',
     left.length ? `  끝내 확인 못 한 칸 ${left.length}개 — 직접 눌러주세요` : '',
