@@ -167,6 +167,24 @@ body.editmode .bagdel{display:block}
 
 /* ── 좁은 화면(폰) ── 1열은 너무 휑해서 2열로 두고 아이콘을 줄인다 ── */
 @media (max-width:760px){
+  /* 버튼이 줄바꿈으로 뒤엉키지 않게 줄을 나눠 배치한다 */
+  .topbar{padding:7px 9px;gap:6px;row-gap:7px}
+  .topbar h1{width:100%;font-size:13px}
+  .topbar .sel.wide{flex:1 1 100%;max-width:none;order:1}
+  .topbar .btn{order:2;flex:1 1 0;min-width:0}
+  .topbar .navlink,.topbar .spacer,.topbar .sep{display:none}
+  .steps{padding:0 9px}
+  .step{padding:9px 12px}
+  .bar{padding:7px 8px;gap:6px;row-gap:7px}
+  .bar .lbl{font-size:10px}
+  .bar .sep,.bar .spacer{display:none}
+  .bar .btn{flex:1 1 auto}
+  .bar .sel{flex:0 0 auto}
+  #opRange{flex:1 1 90px;width:auto!important}
+  .foot{padding:7px 9px;gap:7px}
+  .foot .stat{width:100%;font-size:11px}
+  .foot .btn{flex:1 1 0}
+
   #bagWrap{grid-template-columns:repeat(2,minmax(0,1fr))!important}
   .fc{width:54px;height:54px;flex:0 0 54px}
   .fc .ov{font-size:26px}
@@ -223,7 +241,7 @@ body.editmode .bagdel{display:block}
   <a class="btn navlink" href="index.html">테이블 메이커 →</a>
   <a class="btn navlink" href="goods.html">소분 →</a>
   <div class="sep"></div>
-  <button class="btn acc" onclick="saveFile()" title="보유·제외·확챠 구성을 파일로 저장">저장</button>
+  <button class="btn acc" onclick="exportPNG()" title="확챠표를 이미지로 저장">PNG 저장</button>
 </div>
 
 <div class="steps">
@@ -266,8 +284,6 @@ body.editmode .bagdel{display:block}
     <button class="btn" id="btnSkip" onclick="tglSkipMode()">뽑기 싫은 서번트 선택</button>
     <button class="btn" id="btnEdit" onclick="tglEditMode()">확챠 편집</button>
     <button class="btn sm" id="btnAddBag" onclick="addBag()" style="display:none">+ 복주머니</button>
-    <div class="sep"></div>
-    <button class="btn" onclick="exportPNG()">PNG 저장</button>
     <div class="spacer"></div>
     <button class="btn danger" onclick="clearSkip()">제외 초기화</button>
   </div>
@@ -649,17 +665,7 @@ function addSvt(id){
   persist(); renderBags(); renderPick();
 }
 
-/* ══════════ 저장 / 불러오기 ══════════ */
-function saveFile(){
-  const payload = { v:1, label:evtLabel, own, skip:[...skip], bags, savedAt:new Date().toISOString() };
-  const blob = new Blob([JSON.stringify(payload, null, 1)], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `fgo_확챠플래너_${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
-  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
-  toast('JSON으로 저장했습니다');
-}
+/* ══════════ 불러오기 ══════════ */
 function loadFile(input){
   const fs = [...(input.files||[])]; if(!fs.length) return;
   const imgs = fs.filter(f => /^image\//.test(f.type));
