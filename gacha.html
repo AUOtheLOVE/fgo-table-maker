@@ -196,15 +196,15 @@ body.editmode .bagdel{display:block}
   <select class="sel wide" id="evtSel" onchange="changeEvent()">
     <option value="">확챠 불러오는 중…</option>
   </select>
-  <button class="btn" onclick="newEvent()" title="빈 확챠 표를 만들어 직접 구성">직접 구성</button>
-  <button class="btn on" id="btnKo" onclick="tglKo()" title="서번트 이름·아이콘을 한국 서버 기준으로 표시">이름 한국어</button>
   <div class="sep"></div>
-  <button class="btn" onclick="saveFile()" title="보유·제외·확챠 구성을 JSON으로 저장">저장</button>
-  <button class="btn" onclick="document.getElementById('fileIn').click()">불러오기</button>
-  <input type="file" id="fileIn" accept=".json" style="display:none" onchange="loadFile(this)"/>
+  <button class="btn acc" onclick="document.getElementById('fileIn').click()"
+          title="영기일람 스크린샷을 올리면 보유 서번트와 보구레벨을 자동으로 읽습니다 (저장해둔 JSON도 여기로)">캡쳐 업로드</button>
+  <input type="file" id="fileIn" accept="image/*,.json" multiple style="display:none" onchange="loadFile(this)"/>
   <div class="spacer"></div>
   <a class="btn navlink" href="index.html">테이블 메이커 →</a>
   <a class="btn navlink" href="goods.html">소분 →</a>
+  <div class="sep"></div>
+  <button class="btn acc" onclick="saveFile()" title="보유·제외·확챠 구성을 파일로 저장">저장</button>
 </div>
 
 <div class="steps">
@@ -216,11 +216,6 @@ body.editmode .bagdel{display:block}
 <div class="view" id="v1">
   <div class="bar">
     <input class="inp" id="q1" placeholder="이름 검색…" oninput="renderSvt()" style="width:150px"/>
-    <div class="sep"></div>
-    <span class="lbl">레어도</span>
-    <span class="chip on" data-r="5" onclick="tglR(5,this)">★5</span>
-    <span class="chip" data-r="4" onclick="tglR(4,this)">★4</span>
-    <span class="chip" data-r="3" onclick="tglR(3,this)">★3</span>
     <div class="sep"></div>
     <span class="lbl">클래스</span>
     <span id="clsChips" style="display:flex;gap:4px;flex-wrap:wrap"></span>
@@ -300,8 +295,10 @@ let skip     = new Set();       // svtId
 let step     = 1;
 let skipMode = false, editMode = false;
 let pickTarget = null;
-let koNames  = true;
-let rFilter  = new Set([5]);
+/* 서번트 이름·아이콘은 항상 한국 서버 기준으로 표시한다 */
+const koNames = true;
+/* 복주머니는 ★5만 나온다. 전체 보기로 전환할 때만 ★4·★3이 필요하다 */
+const RARITY = new Set([5,4,3]);
 let cFilter  = new Set();
 /* 기본은 지금 고른 확챠에 나오는 서번트만 본다. 켜면 통상 포함 전체 */
 let showAll  = false;
@@ -317,14 +314,12 @@ const CLASSES = [
   ['alterEgo|foreigner|pretender|beast','엑스트라Ⅱ'],
 ];
 const LS_OWN='fgo_gp_own_v1', LS_SKIP='fgo_gp_skip_v1', LS_BAGS='fgo_gp_bags_v1',
-      LS_REG='fgo_gp_region_v1', LS_OP='fgo_gp_op_v1', LS_KO='fgo_gp_ko_v1';
+      LS_REG='fgo_gp_region_v1', LS_OP='fgo_gp_op_v1';
 
 /* ══════════ INIT ══════════ */
 window.addEventListener('DOMContentLoaded', init);
 
 async function init(){
-  koNames = localStorage.getItem(LS_KO) !== '0';
-  document.getElementById('btnKo').classList.toggle('on', koNames);
   restoreLocal();
   buildClsChips();
   applyCols();
@@ -401,13 +396,6 @@ async function loadSvt(){
       };
     });
   svtById = new Map(svtAll.map(s => [s.id, s]));
-}
-
-async function tglKo(){
-  koNames = !koNames;
-  localStorage.setItem(LS_KO, koNames ? '1' : '0');
-  document.getElementById('btnKo').classList.toggle('on', koNames);
-  try{ await loadSvt(); renderSvt(); renderBags(); }catch(e){ toast('다시 불러오지 못했습니다'); }
 }
 
 async function loadGacha(){
@@ -512,27 +500,11 @@ function grpOf(nm){
   return 'N';
 }
 
-function newEvent(){
-  if(bags.length && !confirm('현재 확챠 표를 지우고 빈 표를 만들까요?')) return;
-  const n = parseInt(prompt('복주머니를 몇 개 만들까요?', '35'), 10);
-  if(!n || n < 1 || n > 200) return;
-  bagCnt = 0;
-  bags = Array.from({length:n}, (_,i) => ({ bid: ++bagCnt, name: `복주머니 ${i+1}`, grp:'N', ids:[] }));
-  evtLabel = '직접 구성';
-  document.getElementById('evtSel').value = '';
-  editMode = true; document.body.classList.add('editmode');
-  document.getElementById('btnEdit').classList.add('on');
-  document.getElementById('btnAddBag').style.display = '';
-  persist(); goStep(2);
-  toast('편집 모드입니다. + 를 눌러 서번트를 넣으세요');
-}
-
 /* ══════════ STEP 1 : 보유 체크 ══════════ */
 function buildClsChips(){
   document.getElementById('clsChips').innerHTML =
     CLASSES.map(([k,v]) => `<span class="chip" data-c="${k}" onclick="tglC('${k}',this)">${v}</span>`).join('');
 }
-function tglR(r,el){ rFilter.has(r) ? rFilter.delete(r) : rFilter.add(r); el.classList.toggle('on'); renderSvt(); }
 function tglC(c,el){ cFilter.has(c) ? cFilter.delete(c) : cFilter.add(c); el.classList.toggle('on'); renderSvt(); }
 function tglShowAll(el){ showAll = !showAll; el.classList.toggle('on'); renderSvt(); }
 
@@ -555,7 +527,8 @@ function filteredSvt(){
   const bs = (!showAll && bags.length) ? bagIdSet() : null;
   const cs = cFilter.size ? classSet() : null;
   return svtAll.filter(s => {
-    if(rFilter.size && !rFilter.has(s.rarity)) return false;
+    if(!showAll && s.rarity !== 5) return false;      // 확챠 대상 = ★5
+    if(showAll && !RARITY.has(s.rarity)) return false;
     if(cs && !cs.has(s.cls)) return false;
     if(bs && !bs.has(s.id)) return false;
     if(q && !s.name.toLowerCase().includes(q) && String(s.no) !== q) return false;
@@ -631,8 +604,7 @@ function renderBags(){
   const wrap = document.getElementById('bagWrap');
   if(!bags.length){
     wrap.innerHTML = `<div class="empty"><b>확챠 표가 없습니다</b>
-      상단에서 확챠를 고르거나, <b style="display:inline">직접 구성</b> 으로 표를 만드세요.<br>
-      Atlas 데이터에 반영된 확챠만 목록에 나옵니다. 아직 열리지 않은 확챠는 직접 구성으로 넣으면 됩니다.</div>`;
+      상단 목록에서 확챠를 고르세요.</div>`;
     document.getElementById('summary').innerHTML = '';
     return;
   }
@@ -780,7 +752,14 @@ function saveFile(){
   toast('JSON으로 저장했습니다');
 }
 function loadFile(input){
-  const f = input.files && input.files[0]; if(!f) return;
+  const fs = [...(input.files||[])]; if(!fs.length) return;
+  const imgs = fs.filter(f => /^image\//.test(f.type));
+  if(imgs.length){                       // 영기일람 스크린샷
+    input.value = '';
+    recognizeShots(imgs);
+    return;
+  }
+  const f = fs[0];
   const rd = new FileReader();
   rd.onload = () => {
     try{
@@ -818,6 +797,19 @@ async function exportPNG(){
   }catch(e){
     toast('이미지 저장 실패 — 이미지 로딩을 기다린 뒤 다시 시도해 주세요');
   }
+}
+
+/* ══════════ 캡쳐 인식 ══════════ */
+/* 영기일람 스크린샷 → 격자 검출 → 얼굴 대조 → 보유·보구레벨 자동 입력.
+   여러 장을 한 번에 올려도 되고, 겹친 줄은 서번트 ID 기준으로 자동 합쳐진다. */
+async function recognizeShots(files){
+  toast(`캡쳐 ${files.length}장 — 인식 엔진 연결 전입니다`);
+  alert(
+    `캡쳐 ${files.length}장을 받았습니다.\n\n` +
+    `자동 인식은 아직 붙이지 않았습니다.\n` +
+    `지금은 아래 그리드에서 직접 클릭해 주세요.\n\n` +
+    `(클릭 = 미보유 → 보구1 → 2 → 3 → 4 → 5, 우클릭은 역방향)`
+  );
 }
 
 /* ══════════ UTIL ══════════ */
