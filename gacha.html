@@ -942,7 +942,8 @@ function scanShot(cv, prog){
       const v=faceVec(ctx,x,y,size,vish,S,box);
       if(!v) continue;
       const m=matchFace(v);
-      const np=(vish>=size*0.98) ? readNP(ctx,x,y,size) : {np:0,conf:0};
+      // 보구Lv 는 카드 위쪽(0.05~0.165)에 있다. 아래가 잘려도 숫자는 남는다.
+      const np=(vish >= size*0.18) ? readNP(ctx,x,y,size) : {np:0,conf:0};
       out.push({ ...m, np:np.np, npConf:np.conf, x, y, size, vis:vish/size });
     }
     if(prog) prog();
