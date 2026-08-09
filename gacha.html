@@ -100,7 +100,15 @@ a.navlink{text-decoration:none}
 #sgrid .sc{padding:3px;gap:0}
 #sgrid .sc img{width:92px;height:92px}
 #sgrid .sc .nm,#sgrid .sc .no{display:none}
-#sgrid .np{font-size:10px;padding:1px 5px;top:4px;right:4px}
+/* 보구레벨 = 이미지 위에 연한 붉은 막을 덮고 큰 숫자를 가운데 */
+#sgrid .sc.owned{background:#fbe9e9;border-color:#e3adad}
+#sgrid .sc.owned img{filter:none}
+#sgrid .np{position:absolute;inset:3px;display:flex;align-items:center;justify-content:center;
+  background:rgba(200,55,65,.34);border-radius:5px;padding:0;letter-spacing:0;
+  font-size:46px;font-weight:800;line-height:1;color:#fff;
+  text-shadow:0 0 4px rgba(130,15,25,.98),0 0 12px rgba(90,10,15,.75),0 2px 5px rgba(0,0,0,.55)}
+#sgrid .np.max{background:rgba(154,124,46,.40);
+  text-shadow:0 0 4px rgba(95,72,20,.98),0 0 12px rgba(70,52,12,.75),0 2px 5px rgba(0,0,0,.55)}
 
 /* ── 고정 하단바 ── */
 .foot{position:fixed;left:0;right:0;bottom:0;background:var(--s1);border-top:1px solid var(--line);
@@ -536,7 +544,7 @@ function svtCard(s){
   return `<div class="sc${np?' owned':''}" data-id="${s.id}"
       onclick="cycNP(${s.id},1)" oncontextmenu="cycNP(${s.id},-1);return false" title="${esc(s.name)} (No.${s.no})">
     <span class="no">${s.no}</span>
-    ${np ? `<span class="np${np>=5?' max':''}">NP${np}</span>` : ''}
+    ${np ? `<span class="np${np>=5?' max':''}">${np}</span>` : ''}
     <img src="${s.face}" loading="lazy" crossorigin="anonymous" alt=""/>
     <span class="nm">${esc(s.name)}</span>
   </div>`;
