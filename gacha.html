@@ -9,7 +9,7 @@
 <meta property="og:site_name" content="한그오 확챠 플래너"/>
 <meta property="og:title" content="2026년 8월 복주머니"/>
 <meta property="og:description" content="보유 체크 → 복주머니별 신규 획득률 자동 계산."/>
-<meta property="og:url" content="https://ryuri-r.github.io/fgo-table-maker/gacha.html"/>
+<meta property="og:url" content="https://auothelove.github.io/fgo-table-maker/gacha.html"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -45,7 +45,6 @@ body{
 .btn.on:hover{background:var(--acc2)}
 .btn.danger:hover{background:var(--skp);color:#fff;border-color:var(--skp)}
 .btn:disabled{opacity:.4;cursor:not-allowed}
-.btn.sm{height:24px;padding:0 8px;font-size:11px}
 
 .sel,.inp{background:var(--bg);color:var(--t1);border:1px solid var(--line);border-radius:5px;
   height:29px;padding:0 8px;font-size:12px;font-family:inherit;outline:none;transition:border-color .12s}
@@ -89,9 +88,6 @@ a.navlink{text-decoration:none}
   cursor:pointer;user-select:none;transition:border-color .1s,background .1s}
 .sc:hover{border-color:var(--acc)}
 .sc img{width:56px;height:56px;object-fit:contain;border-radius:4px;transition:filter .12s,opacity .12s}
-.sc .nm{font-size:9px;color:var(--t2);text-align:center;line-height:1.25;
-  max-height:2.5em;overflow:hidden;word-break:keep-all}
-.sc .no{position:absolute;top:2px;left:3px;font-size:8px;color:var(--t3)}
 .sc.owned{background:#eef5ee;border-color:#b9d4b9}
 .sc.owned img{filter:grayscale(.55) brightness(.94)}
 .np{position:absolute;top:3px;right:3px;background:var(--new);color:#fff;
@@ -104,8 +100,7 @@ a.navlink{text-decoration:none}
 #sgrid .sc img{width:100%;height:auto;aspect-ratio:1/1;object-fit:cover;
   border-radius:6px;display:block}
 #sgrid .sc:hover{background:none;box-shadow:0 0 0 2px var(--acc)}
-#sgrid .sc .nm,#sgrid .sc .no{display:none}
-/* 보구레벨 = 이미지 위에 연한 붉은 막을 덮고 큰 숫자를 가운데 */
+#sgrid .sc .nm,#sgrid /* 보구레벨 = 이미지 위에 연한 붉은 막을 덮고 큰 숫자를 가운데 */
 #sgrid .sc.owned{background:none;box-shadow:0 0 0 2px #cf6a72}
 #sgrid .sc.owned img{filter:none}
 #sgrid .np{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
@@ -138,13 +133,11 @@ a.navlink{text-decoration:none}
 .bag-nm{font-size:17px;font-weight:700;flex:1;min-width:0;outline:none;line-height:1.2;
   display:flex;align-items:center;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bag-nm:focus{white-space:normal;background:#fff;border-radius:3px;box-shadow:0 0 0 1px var(--acc)}
 .bag-body{display:flex;flex-wrap:wrap;gap:4px;padding:7px 8px}
 
 .fc{position:relative;width:86px;height:86px;flex:0 0 86px;user-select:none;cursor:default;
   border-radius:6px;overflow:hidden}
 .fc img{width:100%;height:100%;object-fit:cover;display:block;border-radius:6px}
-.fc .fn{display:none}
 /* 보유 = 붉은 막 + 보구레벨 숫자 / 제외 = 검정 막 */
 .fc .ov{position:absolute;inset:0;display:none;border-radius:6px;
   align-items:center;justify-content:center;pointer-events:none;
@@ -159,6 +152,12 @@ body.skipmode .fc:hover{box-shadow:inset 0 0 0 3px var(--skp)}
 
 /* ── 좁은 화면(폰) ── 1열은 너무 휑해서 2열로 두고 아이콘을 줄인다 ── */
 @media (max-width:760px){
+  .pngbox .fc{width:86px;height:86px;flex:0 0 86px}
+  .pngbox .fc .ov{font-size:40px}
+  .pngbox .bag-nm{font-size:17px}
+  .pngbox .grp{font-size:14px;padding:3px 9px}
+  .pngbox .bag-body{gap:4px;padding:7px 8px}
+  .pngbox .bag-hd{padding:6px 10px;gap:8px}
   /* 버튼이 줄바꿈으로 뒤엉키지 않게 줄을 나눠 배치한다 */
   .topbar{padding:7px 9px;gap:6px;row-gap:7px}
   .topbar h1{width:100%;font-size:13px}
@@ -190,6 +189,9 @@ body.skipmode .fc:hover{box-shadow:inset 0 0 0 3px var(--skp)}
   #sgrid .np{font-size:36px}
 }
 @media (max-width:430px){
+  .pngbox .fc{width:86px;height:86px;flex:0 0 86px}
+  .pngbox .fc .ov{font-size:40px}
+  .pngbox .bag-nm{font-size:17px}
   .fc{width:46px;height:46px;flex:0 0 46px}
   .fc .ov{font-size:22px}
   .bag-nm{font-size:12px}
@@ -205,10 +207,6 @@ body.skipmode .fc:hover{box-shadow:inset 0 0 0 3px var(--skp)}
 .mbg.open{display:flex}
 .mbox{background:var(--s1);border-radius:10px;width:min(760px,92vw);max-height:82vh;
   display:flex;flex-direction:column;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.28)}
-.mhd{padding:11px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
-.mhd h3{font-size:13px;font-weight:600;flex:1}
-.mbody{flex:1;overflow-y:auto;padding:10px}
-.mft{padding:9px 14px;border-top:1px solid var(--line);font-size:11px;color:var(--t3);display:flex;gap:8px;align-items:center}
 
 .toast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);
   background:var(--t1);color:#fff;padding:8px 16px;border-radius:20px;font-size:12px;
@@ -228,8 +226,8 @@ body.skipmode .fc:hover{box-shadow:inset 0 0 0 3px var(--skp)}
   </select>
   <div class="sep"></div>
   <button class="btn acc" onclick="document.getElementById('fileIn').click()"
-          title="영기일람 스크린샷을 올리면 보유 서번트와 보구레벨을 자동으로 읽습니다 (저장해둔 JSON도 여기로)">캡쳐 업로드</button>
-  <input type="file" id="fileIn" accept="image/*,.json" multiple style="display:none" onchange="loadFile(this)"/>
+          title="영기일람 스크린샷을 올리면 보유 서번트와 보구레벨을 자동으로 읽습니다">캡쳐 업로드</button>
+  <input type="file" id="fileIn" accept="image/*" multiple style="display:none" onchange="loadFile(this)"/>
   <div class="spacer"></div>
   <a class="btn navlink" href="index.html">테이블 메이커 →</a>
   <a class="btn navlink" href="goods.html">소분 →</a>
@@ -381,7 +379,7 @@ async function loadSvt(){
   // 필요한 필드만 추려 21KB 로 줄인 파일을 쓴다. [id, 도감번호, 이름(KR우선), 레어도, 클래스, KR출시여부]
   const j = await fetchJSON('data/svt.json');
   svtAll = j.map(r => ({
-    id:r[0], no:r[1], name:r[2], rarity:r[3], cls:r[4], ko:!!r[5],
+    id:r[0], no:r[1], name:r[2], rarity:r[3], cls:r[4],
     face:`https://static.atlasacademy.io/JP/Faces/f_${r[0]}0.png`,
   }));
   svtById = new Map(svtAll.map(s => [s.id, s]));
@@ -586,21 +584,8 @@ function loadFile(input){
     recognizeShots(imgs);
     return;
   }
-  const f = fs[0];
-  const rd = new FileReader();
-  rd.onload = () => {
-    try{
-      const d = JSON.parse(rd.result);
-      if(d.own)   own = d.own;
-      if(d.skip)  skip = new Set(d.skip);
-      if(d.bags){ bags = d.bags; bagCnt = Math.max(0, ...bags.map(b=>b.bid||0)); }
-      if(d.label) evtLabel = d.label;
-      persist(); renderSvt(); renderBags(); updFoot();
-      toast('불러왔습니다');
-    }catch(e){ toast('파일을 읽지 못했습니다'); }
-    input.value = '';
-  };
-  rd.readAsText(f);
+  toast('영기일람 스크린샷 이미지를 올려주세요');
+  input.value='';
 }
 
 async function exportPNG(){
@@ -615,6 +600,7 @@ async function exportPNG(){
   const COL = 3, COLW = 470, GAP = 9;
   const W = COL*COLW + (COL-1)*GAP;
   const box = document.createElement('div');
+  box.className='pngbox';
   box.style.cssText = `position:fixed; left:-99999px; top:0; width:${W+28}px;
     padding:14px; background:#f7f5f0; box-sizing:border-box;`;
   const ttl = document.createElement('div');
@@ -632,8 +618,12 @@ async function exportPNG(){
   document.body.appendChild(box);
 
   try{
-    await Promise.all([...clone.querySelectorAll('img')].map(im =>
-      im.complete ? null : new Promise(r => { im.onload=im.onerror=r; })));
+    // 화면 밖 요소는 lazy 로딩이 영영 시작되지 않아 그대로 두면 무한 대기한다
+    const imgs=[...clone.querySelectorAll('img')];
+    imgs.forEach(im => { im.loading='eager'; if(!im.src) im.src=im.getAttribute('src')||''; });
+    await Promise.all(imgs.map(im => im.complete ? null : new Promise(r => {
+      const done=()=>r(); im.onload=done; im.onerror=done; setTimeout(done, 6000);
+    })));
     const cv = await html2canvas(box, {
       backgroundColor:'#f7f5f0', scale:2, useCORS:true, allowTaint:false,
       width: box.offsetWidth, height: box.offsetHeight,
@@ -659,7 +649,7 @@ async function exportPNG(){
    ══════════════════════════════════════════════════════════ */
 let REC = null;                       // 인식 모델 (한 번만 받는다)
 const REC_TH = { s1: 0.62, gap: 0.05, card: 0.10 };
-const REC_VER = 'v6 2026-08-09';   // 인식 엔진 버전 (캐시 확인용)
+const REC_VER = 'v7 2026-08-09';   // 인식 엔진 버전 (캐시 확인용)
 
 async function loadRecModel(){
   if(REC) return REC;
@@ -906,7 +896,7 @@ function readRowNP(ctx, G, size, dx, y, ncol, tune){
     }
     return out;
   };
-  if(tune){
+  if(tune === true){
     let best={conf:-1, ox:0, oy:0, sc:1};
     for(const sc of [0.95,1.0,1.05,1.10])
       for(let oy=-14;oy<=14;oy+=3)
@@ -924,7 +914,7 @@ function readRowNP(ctx, G, size, dx, y, ncol, tune){
         }
     return { tune:best, cells:run(best.ox,best.oy,best.sc) };
   }
-  return { cells: run(tune.ox||0, tune.oy||0, tune.sc||1) };
+  return { cells: run(tune.ox, tune.oy, tune.sc) };
 }
 
 /* ── 한 장 처리 ── */
@@ -962,11 +952,11 @@ function scanShot(cv, prog){
       const t=rowScore(size,dx,y,2);
       if(t>best.sc) best={sc:t,size,dx,y0:y};
     }
-  const {size,dx,y0}=best, out=[];
+  const {size,dx,y0}=best, out=[]; let cut=0;
   let dTune=null;
   for(let y=y0; y<H; y+=G.per){
     const vish=Math.min(H,y+size)-y;
-    if(vish/size < 0.45) continue;
+    if(vish/size < 0.45){ cut++; continue; }   // 너무 잘린 행 — 조용히 버리지 않고 센다
     // 보구Lv 는 카드 위쪽(0.05~0.165)이라 아래가 잘려도 숫자는 남는다.
     let npCells=null;
     if(vish >= size*0.20){
@@ -986,7 +976,7 @@ function scanShot(cv, prog){
     }
     if(prog) prog();
   }
-  return { ok:true, cells:out, grid:{...G,size,dx,y0}, dTune };
+  return { ok:true, cells:out, cut, grid:{...G,size,dx,y0}, dTune };
 }
 
 /* ── 진입점 ── */
@@ -994,10 +984,12 @@ async function recognizeShots(files){
   const ov=document.getElementById('recOv'); ov.classList.add('open');
   const st=document.getElementById('recSt');
   st.textContent=`인식 엔진 ${REC_VER} — 모델을 받는 중…`;
+  try{
   try{ await loadRecModel(); }
-  catch(e){ st.textContent='모델을 받지 못했습니다.'; return; }
+  catch(e){ ov.classList.remove('open'); alert('인식 모델을 받지 못했습니다. 잠시 뒤 다시 시도해 주세요.'); return; }
 
-  const found = new Map();     // svtId -> {np, s1, gap, thumb}
+  const found = new Map();     // svtId -> {np, s1, gap}
+  let cutRows = 0;
   const weak  = [];
   let bad=0;
   for(let i=0;i<files.length;i++){
@@ -1010,6 +1002,7 @@ async function recognizeShots(files){
     // 카드의 절반 이상이 낮은 점수면 이 장은 신뢰하지 않는다
     const okCnt = r.cells.filter(c => c.s1>=REC_TH.s1).length;
     if(r.cells.length && okCnt < r.cells.length*0.5){ bad++; continue; }
+    cutRows += r.cut||0;
     r.cells.forEach(c => {
       const strong = c.s1>=REC_TH.s1 && c.gap>=REC_TH.gap;
       const cur = found.get(c.id);
@@ -1030,24 +1023,33 @@ async function recognizeShots(files){
   const left    = weak.filter(c => !found.has(c.id));
 
   let added=0, upd=0;
+  let lowRarity = 0;
   found.forEach((v,id) => {
+    // 전 레어도로 대조해야 ★4가 엉뚱한 ★5로 붙는 걸 막는다. 다만 저장은 ★5만 한다.
+    if((svtById.get(id)||{}).rarity !== 5){ lowRarity++; return; }
     const np = v.np || own[id] || 1;
     if(!own[id]) added++; else if(own[id] !== np) upd++;
     own[id] = np;                      // 이번에 본 값으로 덮어쓴다 (다시 올리면 고쳐진다)
   });
   persist(); renderSvt(); renderBags(); updFoot();
-  ov.classList.remove('open');
   const msg = [
     `[${REC_VER}]`,
-    `캡쳐 ${files.length}장에서 서번트 ${found.size}기를 찾았습니다.`,
+    `캡쳐 ${files.length}장에서 ★5 ${found.size-lowRarity}기를 찾았습니다.`,
     `  새로 추가 ${added}기 · 보구레벨 갱신 ${upd}기`,
+    lowRarity ? `  (★4 이하 ${lowRarity}기는 복주머니 대상이 아니라 제외)` : '',
     rescued ? `  애매했지만 다른 캡쳐로 확인된 칸 ${rescued}개` : '',
     left.length ? `  끝내 확인 못 한 칸 ${left.length}개 — 직접 눌러주세요` : '',
-    `\n보구레벨 분포  ${[1,2,3,4,5].map(k=>k+':'+[...found.values()].filter(v=>(v.np||1)===k).length).join('  ')}`,
+    `\n보구레벨 분포  ${[1,2,3,4,5].map(k=>k+':'+[...found.entries()].filter(([id,v])=>(svtById.get(id)||{}).rarity===5 && (v.np||1)===k).length).join('  ')}`,
+    cutRows ? `\n너무 잘려서 건너뛴 줄 ${cutRows}개 — 그 줄이 온전히 나오게 한 장 더 찍어주세요` : '',
     bad ? `\n인식하지 못한 캡쳐 ${bad}장 (영기일람 화면 전체가 나오게 다시 찍어주세요)` : '',
   ].filter(Boolean).join('\n');
   alert(msg);
   toast(`${found.size}기 인식 완료`);
+  }catch(e){
+    alert('인식 중 문제가 생겼습니다.\n' + (e && e.message ? e.message : e));
+  }finally{
+    ov.classList.remove('open');     // 어떤 경우에도 진행 화면은 닫는다
+  }
 }
 
 /* ══════════ UTIL ══════════ */
