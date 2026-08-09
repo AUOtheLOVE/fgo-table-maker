@@ -229,10 +229,10 @@ body.editmode .bagdel{display:block}
     <span class="lbl">클래스</span>
     <span id="clsChips" style="display:flex;gap:4px;flex-wrap:wrap"></span>
     <div class="sep"></div>
-    <span class="chip" id="chipOnlyBag" onclick="tglOnlyBag(this)">확챠 대상만</span>
-    <span class="chip" id="chipHideOwn" onclick="tglHideOwn(this)">미보유만</span>
+    <span class="chip" id="chipShowAll" onclick="tglShowAll(this)"
+          title="끄면 지금 고른 확챠에 나오는 서번트만 보입니다">기간한정+통상</span>
   </div>
-  <div style="font-size:11px;color:var(--t3);margin:0 2px 8px">
+  <div style="font-size:11px;color:var(--t3);margin:0 2px 8px" id="hint1">
     클릭 = 미보유 → 보구1 → 2 → 3 → 4 → 5 → 미보유 (한 바퀴). 되돌리려면 우클릭.
     도감번호(마테리얼) 순으로 정렬돼 있습니다.
   </div>
@@ -307,7 +307,8 @@ let pickTarget = null;
 let koNames  = true;
 let rFilter  = new Set([5]);
 let cFilter  = new Set();
-let onlyBag  = false, hideOwn = false;
+/* 기본은 지금 고른 확챠에 나오는 서번트만 본다. 켜면 통상 포함 전체 */
+let showAll  = false;
 let bagCnt   = 0;
 
 /* 클래스 칩. 엑스트라는 복주머니 확챠가 나누는 방식 그대로 2개로 묶었다.
@@ -475,7 +476,7 @@ function changeEvent(){
   evtLabel = ev.label;
   persist();
   renderBags();
-  if(onlyBag) renderSvt();
+  if(!showAll) renderSvt();   // 확챠가 바뀌면 대상 목록도 바뀐다
   toast(`${bags.length}개 복주머니를 불러왔습니다`);
 }
 
@@ -517,8 +518,7 @@ function buildClsChips(){
 }
 function tglR(r,el){ rFilter.has(r) ? rFilter.delete(r) : rFilter.add(r); el.classList.toggle('on'); renderSvt(); }
 function tglC(c,el){ cFilter.has(c) ? cFilter.delete(c) : cFilter.add(c); el.classList.toggle('on'); renderSvt(); }
-function tglOnlyBag(el){ onlyBag = !onlyBag; el.classList.toggle('on'); renderSvt(); }
-function tglHideOwn(el){ hideOwn = !hideOwn; el.classList.toggle('on'); renderSvt(); }
+function tglShowAll(el){ showAll = !showAll; el.classList.toggle('on'); renderSvt(); }
 
 function bagIdSet(){
   const s = new Set();
@@ -535,13 +535,13 @@ function classSet(){
 
 function filteredSvt(){
   const q = document.getElementById('q1').value.trim().toLowerCase();
-  const bs = onlyBag ? bagIdSet() : null;
+  // 확챠를 골랐고 '기간한정+통상'이 꺼져 있으면 그 확챠에 나오는 서번트만
+  const bs = (!showAll && bags.length) ? bagIdSet() : null;
   const cs = cFilter.size ? classSet() : null;
   return svtAll.filter(s => {
     if(rFilter.size && !rFilter.has(s.rarity)) return false;
     if(cs && !cs.has(s.cls)) return false;
     if(bs && !bs.has(s.id)) return false;
-    if(hideOwn && own[s.id]) return false;
     if(q && !s.name.toLowerCase().includes(q) && String(s.no) !== q) return false;
     return true;
   });
@@ -576,10 +576,7 @@ function cycNP(id, dir){
   // 카드 하나만 갱신 (전체 리렌더 시 스크롤이 튀는 것 방지)
   const card = document.querySelector(`.sc[data-id="${id}"]`);
   const s = svtById.get(id);
-  if(card && s){
-    if(hideOwn && own[id]){ card.remove(); }
-    else card.outerHTML = svtCard(s);
-  }
+  if(card && s) card.outerHTML = svtCard(s);
   updFoot();
   if(step === 2) renderBags();
 }
