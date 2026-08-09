@@ -395,7 +395,9 @@ async function loadGacha(){
   const sel = document.getElementById('evtSel');
   sel.innerHTML = `<option value="0">${esc(preset.label)}</option>`;
   sel.value = '0';
-  if(!bags.length){                       // 처음이면 기본 확챠를 그대로 쓴다
+  // 브라우저에 예전 확챠가 저장돼 있으면 그것부터 밀어낸다.
+  // (안 그러면 확챠가 바뀌어도 옛 표가 계속 남아 다른 확챠를 보게 된다)
+  if(!bags.length || evtLabel !== preset.label){
     bags = preset.bags.map(b => ({...b, ids:b.ids.slice()}));
     evtLabel = preset.label;
     persist();
