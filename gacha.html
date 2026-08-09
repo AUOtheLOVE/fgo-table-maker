@@ -442,12 +442,25 @@ async function loadGacha(){
   sel.innerHTML = '<option value="">— 확챠를 고르세요 —</option>' +
     events.map((e,i) => `<option value="${i}">${esc(e.label)}</option>`).join('');
 
-  // 저장된 표가 없으면 기본 확챠를 자동으로 잡아준다.
-  // 福袋召喚2025(35종, 紅/白 × 카드색 × 보구타입) = 한국 서버 2026 여름 확챠와 같은 구성.
-  if(!bags.length && events.length){
-    let i = events.findIndex(e => /福袋召喚2025/.test(e.label));
-    if(i < 0) i = 0;
-    sel.value = String(i);
+  if(!events.length) return;
+
+  // 기본 확챠 = 福袋召喚2025 (35종, 紅/白 × 카드색 × 보구타입).
+  // 한국 서버에서 곧 열리는 2026 여름 확챠가 이것과 같은 구성이다.
+  const defIdx = (() => {
+    const i = events.findIndex(e => /福袋召喚2025/.test(e.label));
+    return i < 0 ? 0 : i;
+  })();
+
+  // 저장된 표가 있으면 그게 어느 확챠였는지 찾아 드롭다운을 맞춰준다.
+  // (안 맞춰주면 표는 떠 있는데 선택창만 비어 보여서 안 고른 것처럼 보인다)
+  const savedIdx = evtLabel ? events.findIndex(e => e.label === evtLabel) : -1;
+
+  if(bags.length && savedIdx >= 0){
+    sel.value = String(savedIdx);          // 이어서 쓰던 확챠 복원
+  } else if(bags.length){
+    sel.value = '';                        // 직접 구성한 표 — 매칭되는 확챠 없음
+  } else {
+    sel.value = String(defIdx);            // 처음이면 기본 확챠를 잡아준다
     changeEvent();
   }
 }
