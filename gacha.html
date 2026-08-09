@@ -445,7 +445,7 @@ async function loadGacha(){
     return {
       key, gachas: gs, rg: gs[0]._rg, opened: gs[0].openedAt, closed: gs[0].closedAt, isPreset,
       label: isPreset
-        ? `한그오 2025 여름확챠 (${gs.length}종)`
+        ? `한그오 2025 여름확챠 (${gs.length}종 中 2번)`
         : `${gs[0]._rg === 'KR' ? '한국' : '일본'} · ${ymd} · ${name} (${gs.length}종)`,
     };
   });
