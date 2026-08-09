@@ -310,11 +310,14 @@ let cFilter  = new Set();
 let onlyBag  = false, hideOwn = false;
 let bagCnt   = 0;
 
+/* 클래스 칩. 엑스트라는 복주머니 확챠가 나누는 방식 그대로 2개로 묶었다.
+   (JP 福袋 데이터 실측: Ⅰ=룰러·어벤저·문캔서 / Ⅱ=알터에고·포리너·프리텐더, 겹침 없음)
+   비스트는 확챠에 안 나오지만 어디든 들어가야 해서 Ⅱ에 붙였다. */
 const CLASSES = [
   ['saber','세이버'],['archer','아처'],['lancer','랜서'],['rider','라이더'],
   ['caster','캐스터'],['assassin','어새신'],['berserker','버서커'],
-  ['ruler','룰러'],['avenger','어벤저'],['alterEgo','알터에고'],
-  ['moonCancer','문캔서'],['foreigner','포리너'],['pretender','프리텐더'],['beast','비스트'],
+  ['ruler|avenger|moonCancer','엑스트라Ⅰ'],
+  ['alterEgo|foreigner|pretender|beast','엑스트라Ⅱ'],
 ];
 const LS_OWN='fgo_gp_own_v1', LS_SKIP='fgo_gp_skip_v1', LS_BAGS='fgo_gp_bags_v1',
       LS_REG='fgo_gp_region_v1', LS_OP='fgo_gp_op_v1', LS_KO='fgo_gp_ko_v1';
@@ -523,12 +526,20 @@ function bagIdSet(){
   return s;
 }
 
+/* 칩 key는 'ruler|avenger|moonCancer' 처럼 묶여 있어서 실제 className 집합으로 편다 */
+function classSet(){
+  const s = new Set();
+  cFilter.forEach(k => k.split('|').forEach(c => s.add(c)));
+  return s;
+}
+
 function filteredSvt(){
   const q = document.getElementById('q1').value.trim().toLowerCase();
   const bs = onlyBag ? bagIdSet() : null;
+  const cs = cFilter.size ? classSet() : null;
   return svtAll.filter(s => {
     if(rFilter.size && !rFilter.has(s.rarity)) return false;
-    if(cFilter.size && !cFilter.has(s.cls)) return false;
+    if(cs && !cs.has(s.cls)) return false;
     if(bs && !bs.has(s.id)) return false;
     if(hideOwn && own[s.id]) return false;
     if(q && !s.name.toLowerCase().includes(q) && String(s.no) !== q) return false;
