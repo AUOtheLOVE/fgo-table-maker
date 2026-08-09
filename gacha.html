@@ -133,31 +133,30 @@ a.navlink{text-decoration:none}
 .bag-nm{font-size:11.5px;font-weight:600;flex:1;min-width:0;outline:none;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bag-nm:focus{white-space:normal;background:#fff;border-radius:3px;box-shadow:0 0 0 1px var(--acc)}
-.bag-body{display:flex;flex-wrap:wrap;gap:5px;padding:8px 9px}
+.bag-body{display:flex;flex-wrap:wrap;gap:4px;padding:7px 8px}
 
-.fc{position:relative;width:62px;display:flex;flex-direction:column;align-items:center;gap:2px;
-  cursor:default;user-select:none}
-.fc img{width:54px;height:54px;object-fit:contain;border-radius:4px;border:2px solid transparent;transition:all .12s}
-.fc .fn{font-size:8.5px;color:var(--t3);text-align:center;line-height:1.2;
-  max-height:2.4em;overflow:hidden;word-break:keep-all}
-.fc.st-new img{border-color:var(--new)}
-.fc.st-own img{filter:grayscale(1) opacity(.5)}
-/* 제외 = 검정 오버레이. 농도는 --skpop (0~1) 로 조절 */
-.fc.st-skip::after{content:'';position:absolute;top:0;left:4px;width:54px;height:54px;
-  border-radius:4px;background:#000;opacity:var(--skpop);pointer-events:none}
-.fc.st-skip .fn{opacity:.45}
-.fc .tag{position:absolute;top:1px;right:1px;font-size:8px;font-weight:700;
-  border-radius:3px;padding:0 3px;color:#fff;letter-spacing:.02em;z-index:3}
-.fc.st-new .tag{background:var(--new)}
-.fc.st-own .tag{background:var(--own)}
-.fc.st-skip .tag{background:var(--skp)}
+.fc{position:relative;width:86px;height:86px;flex:0 0 86px;user-select:none;cursor:default;
+  border-radius:6px;overflow:hidden}
+.fc img{width:100%;height:100%;object-fit:cover;display:block;border-radius:6px}
+.fc .fn{display:none}
+/* 보유 = 붉은 막 + 보구레벨 숫자 (보유 체크 화면과 같은 표시) */
+.fc.st-own::after{content:attr(data-np);position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(200,55,65,.34);border-radius:6px;
+  font-size:40px;font-weight:800;line-height:1;color:#fff;
+  text-shadow:0 0 4px rgba(130,15,25,.98),0 0 12px rgba(90,10,15,.75),0 2px 5px rgba(0,0,0,.55)}
+.fc.st-own.np5::after{background:rgba(154,124,46,.40);
+  text-shadow:0 0 4px rgba(95,72,20,.98),0 0 12px rgba(70,52,12,.75),0 2px 5px rgba(0,0,0,.55)}
+/* 제외 = 검정 막. 농도는 --skpop */
+.fc.st-skip::after{content:'';position:absolute;inset:0;border-radius:6px;
+  background:#000;opacity:var(--skpop);pointer-events:none}
 body.skipmode .fc{cursor:pointer}
-body.skipmode .fc:hover img{border-color:var(--skp)}
+body.skipmode .fc:hover{box-shadow:inset 0 0 0 3px var(--skp)}
 body.editmode .fc{cursor:pointer}
 .fc .del{position:absolute;top:-3px;left:-3px;width:16px;height:16px;line-height:14px;text-align:center;
   background:var(--skp);color:#fff;border-radius:50%;font-size:11px;display:none;z-index:2}
 body.editmode .fc .del{display:block}
-.addbtn{width:54px;height:54px;border:1px dashed var(--line);border-radius:4px;background:none;
+.addbtn{width:86px;height:86px;border:1px dashed var(--line);border-radius:4px;background:none;
   color:var(--t3);font-size:20px;cursor:pointer;display:none;align-items:center;justify-content:center}
 body.editmode .addbtn{display:flex}
 .addbtn:hover{border-color:var(--acc);color:var(--acc)}
@@ -554,15 +553,13 @@ function faceCell(bid, id){
   const s = svtById.get(id);
   const face = s ? s.face : `https://static.atlasacademy.io/JP/Faces/f_${id}0.png`;
   const nm = s ? s.name : ('#' + id);
-  let st, tag;
-  if(skip.has(id))      { st='st-skip'; tag='제외'; }
-  else if(own[id])      { st='st-own';  tag='NP'+own[id]; }
-  else                  { st='st-new';  tag='NEW'; }
-  return `<div class="fc ${st}" data-id="${id}" onclick="clickFace(${bid},${id})" title="${esc(nm)}">
+  const np = own[id] || 0;
+  let cls = 'st-new', attr = '';
+  if(skip.has(id))      cls = 'st-skip';
+  else if(np){ cls = 'st-own' + (np>=5 ? ' np5' : ''); attr = ` data-np="${np}"`; }
+  return `<div class="fc ${cls}"${attr} data-id="${id}" onclick="clickFace(${bid},${id})" title="${esc(nm)}${np?' · 보구'+np:''}">
     <span class="del" onclick="event.stopPropagation();delSvt(${bid},${id})">×</span>
-    <span class="tag">${tag}</span>
     <img src="${face}" loading="lazy" crossorigin="anonymous" alt=""/>
-    <span class="fn">${esc(nm)}</span>
   </div>`;
 }
 
