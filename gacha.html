@@ -125,14 +125,14 @@ a.navlink{text-decoration:none}
 #bagWrap{display:grid;gap:9px}
 .bag{background:var(--s1);border:1px solid var(--line);border-radius:8px;overflow:hidden;
   display:flex;flex-direction:column;transition:box-shadow .12s,border-color .12s}
-.bag-hd{display:flex;align-items:center;gap:8px;padding:9px 11px;min-height:42px;
+.bag-hd{display:flex;align-items:center;gap:8px;padding:6px 10px;
   background:var(--s2);border-bottom:1px solid var(--line)}
-.grp{font-size:13px;font-weight:800;border-radius:5px;padding:4px 10px;color:#fff;flex-shrink:0;
+.grp{font-size:14px;font-weight:800;border-radius:5px;padding:3px 9px;color:#fff;flex-shrink:0;
   line-height:1;display:inline-flex;align-items:center;letter-spacing:.03em}
 .grp.R{background:var(--red)}
 .grp.W{background:var(--wht)}
 .grp.N{background:var(--t3)}
-.bag-nm{font-size:15px;font-weight:700;flex:1;min-width:0;outline:none;line-height:1.2;
+.bag-nm{font-size:17px;font-weight:700;flex:1;min-width:0;outline:none;line-height:1.2;
   display:flex;align-items:center;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bag-nm:focus{white-space:normal;background:#fff;border-radius:3px;box-shadow:0 0 0 1px var(--acc)}
@@ -232,9 +232,9 @@ body.editmode .bagdel{display:block}
   <div class="bar">
     <span class="lbl">열</span>
     <select class="sel" id="colSel" onchange="applyCols()">
-      <option value="0">자동</option>
+      <option value="0" selected>자동 (화면 폭에 맞춤)</option>
       <option value="1">1</option>
-      <option value="2" selected>2</option>
+      <option value="2">2</option>
       <option value="3">3</option>
       <option value="4">4</option>
     </select>
@@ -488,7 +488,7 @@ function goStep(n){
 function applyCols(){
   const c = document.getElementById('colSel').value;
   document.getElementById('bagWrap').style.gridTemplateColumns =
-    c === '0' ? 'repeat(auto-fill,minmax(340px,1fr))' : `repeat(${c},1fr)`;
+    c === '0' ? 'repeat(auto-fill,minmax(470px,1fr))' : `repeat(${c},1fr)`;
 }
 
 function renderBags(){
@@ -674,8 +674,10 @@ async function exportPNG(){
 
   // 화면 요소를 그대로 찍으면 스크롤 영역·여백 때문에 아래가 텅 비고 끝줄이 잘린다.
   // 표만 복제해 화면 밖 컨테이너에 담고 그것만 찍는다.
+  // 폰에서 찍으면 화면이 좁아 표가 찌그러진다. 내보내기는 화면 폭과 무관하게 고정 3열로 그린다.
   const wrap = document.getElementById('bagWrap');
-  const W = wrap.getBoundingClientRect().width;
+  const COL = 3, COLW = 470, GAP = 9;
+  const W = COL*COLW + (COL-1)*GAP;
   const box = document.createElement('div');
   box.style.cssText = `position:fixed; left:-99999px; top:0; width:${W+28}px;
     padding:14px; background:#f7f5f0; box-sizing:border-box;`;
@@ -687,7 +689,7 @@ async function exportPNG(){
   clone.style.cssText = getComputedStyle(wrap).cssText || '';
   clone.style.display = 'grid';
   clone.style.gap = '9px';
-  clone.style.gridTemplateColumns = getComputedStyle(wrap).gridTemplateColumns;
+  clone.style.gridTemplateColumns = `repeat(${COL}, ${COLW}px)`;
   clone.style.width = W + 'px';
   clone.querySelectorAll('.del,.addbtn').forEach(e => e.remove());
   box.appendChild(ttl); box.appendChild(clone);
