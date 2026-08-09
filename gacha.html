@@ -72,7 +72,10 @@ a.navlink{text-decoration:none}
 
 .bar{background:var(--s1);border:1px solid var(--line);border-radius:7px;
   padding:8px 10px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:10px}
-.bar .lbl{font-size:11px;color:var(--t3);margin-right:2px}
+.bar .lbl{font-size:11px;color:var(--t3);margin-right:2px;white-space:nowrap}
+.opbox{display:inline-flex;align-items:center;gap:6px;flex:0 1 auto;min-width:0}
+.opbox input[type=range]{width:104px;accent-color:var(--acc);flex:0 1 104px;min-width:60px}
+#opVal{min-width:34px;text-align:right;font-variant-numeric:tabular-nums}
 
 .chip{background:var(--s2);border:1px solid var(--line);border-radius:20px;
   padding:3px 10px;font-size:11px;cursor:pointer;color:var(--t2);transition:all .1s;user-select:none}
@@ -153,17 +156,6 @@ a.navlink{text-decoration:none}
 .fc.st-skip .ov{display:flex;background:#0d1b2a;opacity:var(--skpop)}
 body.skipmode .fc{cursor:pointer}
 body.skipmode .fc:hover{box-shadow:inset 0 0 0 3px var(--skp)}
-body.editmode .fc{cursor:pointer}
-.fc .del{position:absolute;top:-3px;left:-3px;width:16px;height:16px;line-height:14px;text-align:center;
-  background:var(--skp);color:#fff;border-radius:50%;font-size:11px;display:none;z-index:2}
-body.editmode .fc .del{display:block}
-.addbtn{width:86px;height:86px;border:1px dashed var(--line);border-radius:4px;background:none;
-  color:var(--t3);font-size:20px;cursor:pointer;display:none;align-items:center;justify-content:center}
-body.editmode .addbtn{display:flex}
-.addbtn:hover{border-color:var(--acc);color:var(--acc)}
-.bagdel{display:none;background:none;border:none;color:var(--t3);cursor:pointer;font-size:14px;padding:0 2px}
-body.editmode .bagdel{display:block}
-.bagdel:hover{color:var(--skp)}
 
 /* ── 좁은 화면(폰) ── 1열은 너무 휑해서 2열로 두고 아이콘을 줄인다 ── */
 @media (max-width:760px){
@@ -180,7 +172,8 @@ body.editmode .bagdel{display:block}
   .bar .sep,.bar .spacer{display:none}
   .bar .btn{flex:1 1 auto}
   .bar .sel{flex:0 0 auto}
-  #opRange{flex:1 1 90px;width:auto!important}
+  .opbox{flex:1 1 100%;order:5}
+  .opbox input[type=range]{flex:1 1 auto}
   .foot{padding:7px 9px;gap:7px}
   .foot .stat{width:100%;font-size:11px}
   .foot .btn{flex:1 1 0}
@@ -276,14 +269,14 @@ body.editmode .bagdel{display:block}
       <option value="4">4</option>
     </select>
     <div class="sep"></div>
-    <span class="lbl">제외 농도</span>
-    <input type="range" id="opRange" min="0" max="100" step="5" value="55"
-           oninput="setOp(this.value)" style="width:104px;accent-color:var(--acc)"/>
-    <span class="lbl" id="opVal" style="width:32px">55%</span>
+    <span class="opbox">
+      <span class="lbl">제외 농도</span>
+      <input type="range" id="opRange" min="0" max="100" step="5" value="55"
+             oninput="setOp(this.value)"/>
+      <span class="lbl" id="opVal">55%</span>
+    </span>
     <div class="sep"></div>
     <button class="btn" id="btnSkip" onclick="tglSkipMode()">뽑기 싫은 서번트 선택</button>
-    <button class="btn" id="btnEdit" onclick="tglEditMode()">확챠 편집</button>
-    <button class="btn sm" id="btnAddBag" onclick="addBag()" style="display:none">+ 복주머니</button>
     <div class="spacer"></div>
     <button class="btn danger" onclick="clearSkip()">제외 초기화</button>
   </div>
@@ -296,19 +289,6 @@ body.editmode .bagdel{display:block}
   <div class="spacer"></div>
   <button class="btn danger" onclick="clearOwn()">보유 초기화</button>
   <button class="btn acc" id="btnGo" onclick="goStep(2)">확인 → 확챠 표 보기</button>
-</div>
-
-<!-- 서번트 추가 모달 -->
-<div class="mbg" id="pick" onclick="if(event.target===this)closePick()">
-  <div class="mbox">
-    <div class="mhd">
-      <h3 id="pickTtl">서번트 추가</h3>
-      <input class="inp" id="q2" placeholder="검색…" oninput="renderPick()" style="width:180px"/>
-      <button class="btn sm" onclick="closePick()">닫기</button>
-    </div>
-    <div class="mbody"><div class="sgrid" id="pickGrid"></div></div>
-    <div class="mft"><span id="pickFt">클릭하면 이 복주머니에 추가됩니다</span></div>
-  </div>
 </div>
 
 <!-- 인식 진행 표시 -->
@@ -333,8 +313,7 @@ let evtLabel = '';
 let own      = {};              // svtId -> np(1~5)
 let skip     = new Set();       // svtId
 let step     = 1;
-let skipMode = false, editMode = false;
-let pickTarget = null;
+let skipMode = false;
 let cFilter  = new Set();
 /* ★5 는 기간한정·통상 구분 없이 전부 보여준다.
    확챠 대상만 걸러도 캡쳐 인식은 통상까지 잡아내므로 숨겨봐야 혼란만 준다. */
@@ -538,14 +517,11 @@ function renderBags(){
     const gl = b.grp === 'R' ? 'RED' : b.grp === 'W' ? 'WHITE' : '—';
     return `<div class="bag" data-bid="${b.bid}">
       <div class="bag-hd">
-        <span class="grp ${b.grp}" onclick="cycGrp(${b.bid})" title="편집 모드에서 클릭하면 RED/WHITE 전환">${gl}</span>
-        <span class="bag-nm" contenteditable="true" spellcheck="false"
-              onblur="renameBag(${b.bid},this.textContent)">${esc(b.name)}</span>
-        <button class="bagdel" onclick="delBag(${b.bid})" title="이 복주머니 삭제">×</button>
+        <span class="grp ${b.grp}">${gl}</span>
+        <span class="bag-nm">${esc(b.name)}</span>
       </div>
       <div class="bag-body">
         ${b.ids.map(id => faceCell(b.bid, id)).join('')}
-        <button class="addbtn" onclick="openPick(${b.bid})" title="서번트 추가">+</button>
       </div>
     </div>`;
   }).join('');
@@ -570,14 +546,12 @@ function faceCell(bid, id){
   if(skip.has(id))      cls = 'st-skip';
   else if(np){ cls = 'st-own' + (np>=5 ? ' np5' : ''); txt = String(np); }
   return `<div class="fc ${cls}" data-id="${id}" onclick="clickFace(${bid},${id})">
-    <span class="del" onclick="event.stopPropagation();delSvt(${bid},${id})">×</span>
     <img src="${face}" loading="lazy" crossorigin="anonymous" alt=""/>
     <span class="ov">${txt}</span>
   </div>`;
 }
 
 function clickFace(bid, id){
-  if(editMode) return;              // 편집 모드에선 × 로만 삭제
   if(!skipMode) return;
   skip.has(id) ? skip.delete(id) : skip.add(id);
   persist(); renderBags();
@@ -585,17 +559,9 @@ function clickFace(bid, id){
 
 function tglSkipMode(){
   skipMode = !skipMode;
-  if(skipMode && editMode) tglEditMode();
   document.body.classList.toggle('skipmode', skipMode);
   document.getElementById('btnSkip').classList.toggle('on', skipMode);
   toast(skipMode ? '뽑기 싫은 서번트를 클릭하세요' : '제외 선택을 마쳤습니다');
-}
-function tglEditMode(){
-  editMode = !editMode;
-  if(editMode && skipMode) tglSkipMode();
-  document.body.classList.toggle('editmode', editMode);
-  document.getElementById('btnEdit').classList.toggle('on', editMode);
-  document.getElementById('btnAddBag').style.display = editMode ? '' : 'none';
 }
 function clearSkip(){
   if(!skip.size) return;
@@ -603,67 +569,7 @@ function clearSkip(){
   skip.clear(); persist(); renderBags(); toast('제외를 지웠습니다');
 }
 
-/* ── 편집 ── */
-function renameBag(bid, txt){
-  const b = bags.find(x => x.bid === bid); if(!b) return;
-  const v = (txt||'').trim(); if(!v || v === b.name) return;
-  b.name = v; persist();
-}
-function cycGrp(bid){
-  if(!editMode) return;
-  const b = bags.find(x => x.bid === bid); if(!b) return;
-  b.grp = b.grp === 'R' ? 'W' : b.grp === 'W' ? 'N' : 'R';
-  persist(); renderBags();
-}
-function addBag(){
-  bags.push({ bid: ++bagCnt, name: `복주머니 ${bags.length+1}`, grp:'N', ids:[] });
-  persist(); renderBags();
-}
-function delBag(bid){
-  const b = bags.find(x => x.bid === bid);
-  if(b && b.ids.length && !confirm(`"${b.name}" 을(를) 삭제할까요?`)) return;
-  bags = bags.filter(x => x.bid !== bid);
-  persist(); renderBags();
-}
-function delSvt(bid, id){
-  const b = bags.find(x => x.bid === bid); if(!b) return;
-  const i = b.ids.indexOf(id);
-  if(i >= 0) b.ids.splice(i, 1);
-  persist(); renderBags();
-}
 
-/* ── 서번트 선택 모달 ── */
-function openPick(bid){
-  pickTarget = bid;
-  const b = bags.find(x => x.bid === bid);
-  document.getElementById('pickTtl').textContent = b ? `“${b.name}” 에 추가` : '서번트 추가';
-  document.getElementById('q2').value = '';
-  document.getElementById('pick').classList.add('open');
-  renderPick();
-  setTimeout(()=>document.getElementById('q2').focus(), 30);
-}
-function closePick(){ document.getElementById('pick').classList.remove('open'); pickTarget = null; }
-function renderPick(){
-  const q = document.getElementById('q2').value.trim().toLowerCase();
-  const b = bags.find(x => x.bid === pickTarget);
-  const has = new Set(b ? b.ids : []);
-  let list = svtAll.filter(s => s.rarity >= 4 && !has.has(s.id));
-  if(q) list = list.filter(s => s.name.toLowerCase().includes(q) || String(s.no) === q);
-  else  list = list.filter(s => s.rarity === 5);
-  document.getElementById('pickGrid').innerHTML = list.slice(0,300).map(s =>
-    `<div class="sc" onclick="addSvt(${s.id})" title="${esc(s.name)}">
-      <span class="no">${s.no}</span>
-      <img src="${s.face}" loading="lazy" crossorigin="anonymous" alt=""/>
-      <span class="nm">${esc(s.name)}</span>
-    </div>`).join('') || '<div class="empty">결과 없음</div>';
-  document.getElementById('pickFt').textContent =
-    q ? `${list.length}기 (★4 이상 검색)` : `★5 ${list.length}기 — 검색하면 ★4까지 나옵니다`;
-}
-function addSvt(id){
-  const b = bags.find(x => x.bid === pickTarget); if(!b) return;
-  if(!b.ids.includes(id)) b.ids.push(id);
-  persist(); renderBags(); renderPick();
-}
 
 /* ══════════ 불러오기 ══════════ */
 function loadFile(input){
@@ -694,7 +600,6 @@ function loadFile(input){
 async function exportPNG(){
   if(!bags.length){ toast('내보낼 표가 없습니다'); return; }
   if(skipMode) tglSkipMode();
-  if(editMode) tglEditMode();
   toast('이미지 만드는 중…');
 
   // 화면 요소를 그대로 찍으면 스크롤 영역·여백 때문에 아래가 텅 비고 끝줄이 잘린다.
@@ -716,7 +621,7 @@ async function exportPNG(){
   clone.style.gap = '9px';
   clone.style.gridTemplateColumns = `repeat(${COL}, ${COLW}px)`;
   clone.style.width = W + 'px';
-  clone.querySelectorAll('.del,.addbtn').forEach(e => e.remove());
+
   box.appendChild(ttl); box.appendChild(clone);
   document.body.appendChild(box);
 
