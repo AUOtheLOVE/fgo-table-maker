@@ -881,14 +881,33 @@ function matchFace(v, stride){
   }
   return { id: ids[i1], s1: b1, gap: b1-b2 };
 }
-/* 보구 숫자 — 흰 글자만 남기고 학습해둔 72개 표본과 최근접 비교 */
-function readNP(ctx,x,y,cs){
-  const g=REC.dg, bx=g.box;
-  const l=x+(bx[0]*cs|0), t=y+(bx[1]*cs|0), r=x+(bx[2]*cs|0), b=y+(bx[3]*cs|0);
-  if(r-l<3 || b-t<3) return {np:0,conf:0};
-  const lum=boxDown(ctx, l, t, r-l, b-t, g.w, g.h, 1);
-  const n=g.w*g.h, v=new Float32Array(n);
-  for(let i=0;i<n;i++) v[i] = lum[i]>195 ? 1 : 0;
+/* ── 보구 숫자 ──
+   숫자칸은 20x27px 남짓이라 정렬에 아주 예민하다. 4px만 어긋나도 전부 오독한다.
+   (얼굴은 영역이 커서 9px 어긋나도 멀쩡하다 — 그래서 얼굴 보정만 믿으면 숫자가 깨진다)
+   그래서 행의 상단 띠를 한 번 읽어두고, 숫자상자 위치·크기를 따로 맞춘다. */
+function grabBand(ctx, x, y, w, h){
+  w=Math.max(1,w|0); h=Math.max(1,h|0);
+  return { d: ctx.getImageData(x|0, y|0, w, h).data, x:x|0, y:y|0, w, h };
+}
+function npFromBand(band, l, t, r, b){
+  const g=REC.dg, ow=g.w, oh=g.h;
+  const sw=r-l, sh=b-t;
+  if(sw<3 || sh<3) return {np:0,conf:0};
+  const lx=l-band.x, ty=t-band.y;
+  if(lx<0 || ty<0 || lx+sw>band.w || ty+sh>band.h) return {np:0,conf:0};
+  const v=new Float32Array(ow*oh);
+  for(let oy=0;oy<oh;oy++){
+    const y0=(oy*sh/oh)|0, y1=Math.max(y0+1,((oy+1)*sh/oh)|0);
+    for(let ox=0;ox<ow;ox++){
+      const x0=(ox*sw/ow)|0, x1=Math.max(x0+1,((ox+1)*sw/ow)|0);
+      let sum=0,n=0;
+      for(let yy=y0;yy<y1;yy++){
+        let i=(((ty+yy)*band.w)+(lx+x0))*4;
+        for(let xx=x0;xx<x1;xx++,i+=4){ sum += band.d[i]*0.299+band.d[i+1]*0.587+band.d[i+2]*0.114; n++; }
+      }
+      v[oy*ow+ox] = (sum/n) > 195 ? 1 : 0;
+    }
+  }
   if(!normalize(v)) return {np:0,conf:0};
   let best=-2, bi=0;
   for(let i=0;i<g.n;i++){
@@ -896,7 +915,45 @@ function readNP(ctx,x,y,cs){
     for(let j=0;j<g.d;j++) s+=g.X[o+j]*v[j];
     if(s>best){ best=s; bi=i; }
   }
-  return { np: g.Y[bi], conf: best };
+  return { np:g.Y[bi], conf:best };
+}
+/* 한 행을 읽으며 숫자상자 오프셋(ox,oy)·배율(sc)을 찾는다 */
+function readRowNP(ctx, G, size, dx, y, ncol, tune){
+  const bx=REC.dg.box;
+  const bandY = y + (bx[1]*size|0) - 16;
+  const bandH = ((bx[3]-bx[1])*size*1.2|0) + 34;
+  const bandX = G.x0 + dx - 4;
+  const bandW = Math.min((ncol-1)*G.pitch + size, 99999);
+  const band = grabBand(ctx, bandX, bandY, bandW + 12, bandH);
+  const run=(ox,oy,sc)=>{
+    const w=(bx[2]-bx[0])*size*sc, h=(bx[3]-bx[1])*size*sc;
+    const out=[];
+    for(let c=0;c<ncol;c++){
+      const x=G.x0+dx+c*G.pitch;
+      const l=x+(bx[0]*size|0)+ox, t=y+(bx[1]*size|0)+oy;
+      out.push(npFromBand(band, l, t, l+w|0, t+h|0));
+    }
+    return out;
+  };
+  if(tune){
+    let best={conf:-1, ox:0, oy:0, sc:1};
+    for(const sc of [0.95,1.0,1.05,1.10])
+      for(let oy=-14;oy<=14;oy+=3)
+        for(let ox=-14;ox<=14;ox+=3){
+          const r=run(ox,oy,sc);
+          const m=r.reduce((a,z)=>a+z.conf,0)/r.length;
+          if(m>best.conf) best={conf:m,ox,oy,sc};
+        }
+    for(const sc of [best.sc-0.05,best.sc,best.sc+0.05])       // 미세
+      for(let oy=best.oy-3;oy<=best.oy+3;oy++)
+        for(let ox=best.ox-3;ox<=best.ox+3;ox++){
+          const r=run(ox,oy,sc);
+          const m=r.reduce((a,z)=>a+z.conf,0)/r.length;
+          if(m>best.conf) best={conf:m,ox,oy,sc};
+        }
+    return { tune:best, cells:run(best.ox,best.oy,best.sc) };
+  }
+  return { cells: run(tune.ox||0, tune.oy||0, tune.sc||1) };
 }
 
 /* ── 한 장 처리 ── */
@@ -935,9 +992,17 @@ function scanShot(cv, prog){
       if(t>best.sc) best={sc:t,size,dx,y0:y};
     }
   const {size,dx,y0}=best, out=[];
+  let dTune=null;
   for(let y=y0; y<H; y+=G.per){
     const vish=Math.min(H,y+size)-y;
     if(vish/size < 0.45) continue;
+    // 보구Lv 는 카드 위쪽(0.05~0.165)이라 아래가 잘려도 숫자는 남는다.
+    let npCells=null;
+    if(vish >= size*0.20){
+      const rr = readRowNP(ctx, G, size, dx, y, G.ncol, dTune || true);
+      if(rr.tune) dTune = rr.tune;        // 첫 행에서 한 번만 맞추고 나머지 행에 재사용
+      npCells = rr.cells;
+    }
     for(let c=0;c<G.ncol;c++){
       const x=G.x0+dx+c*G.pitch;
       if(x+size>cv.width) continue;
@@ -945,13 +1010,12 @@ function scanShot(cv, prog){
       const v=faceVec(ctx,x,y,size,vish,S,box);
       if(!v) continue;
       const m=matchFace(v);
-      // 보구Lv 는 카드 위쪽(0.05~0.165)에 있다. 아래가 잘려도 숫자는 남는다.
-      const np=(vish >= size*0.18) ? readNP(ctx,x,y,size) : {np:0,conf:0};
+      const np=(npCells && npCells[c]) ? npCells[c] : {np:0,conf:0};
       out.push({ ...m, np:np.np, npConf:np.conf, x, y, size, vis:vish/size });
     }
     if(prog) prog();
   }
-  return { ok:true, cells:out, grid:{...G,size,dx,y0} };
+  return { ok:true, cells:out, grid:{...G,size,dx,y0}, dTune };
 }
 
 /* ── 진입점 ── */
