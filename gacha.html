@@ -653,7 +653,7 @@ async function exportPNG(){
    ══════════════════════════════════════════════════════════ */
 let REC = null;                       // 인식 모델 (한 번만 받는다)
 const REC_TH = { s1: 0.62, gap: 0.05, card: 0.10 };
-const REC_VER = 'v3 2026-08-09';   // 인식 엔진 버전 (캐시 확인용)
+const REC_VER = 'v4 2026-08-09';   // 인식 엔진 버전 (캐시 확인용)
 
 async function loadRecModel(){
   if(REC) return REC;
@@ -705,48 +705,81 @@ function loadImg(file){
   });
 }
 
-/* ── 격자 검출: 카드의 금색 테두리를 세로/가로로 투영해 간격을 잰다 ── */
+/* ── 격자 검출 ──
+   화면 어디에 격자가 있는지 비율로 가정하지 않는다.
+   에뮬레이터 창처럼 게임 화면이 이미지의 일부일 수도 있어서,
+   금색 테두리를 전체 폭에서 훑어 간격·시작점을 직접 찾는다. */
 function detectGrid(cv){
   const W=cv.width, H=cv.height;
   const d=cv.getContext('2d').getImageData(0,0,W,H).data;
-  const gold=(i)=>{ const r=d[i],g=d[i+1],b=d[i+2];
-    return (r>150 && g>110 && b<130 && r-b>60) ? 1 : 0; };
-  const y0=Math.round(H*0.28), y1=Math.round(H*0.93);
+  const y0=Math.round(H*0.18), y1=Math.round(H*0.98);
   const col=new Float64Array(W);
-  for(let y=y0;y<y1;y+=2) for(let x=0;x<W;x++) col[x]+=gold((y*W+x)*4);
-  let mx=0; for(let x=0;x<W;x++) mx=Math.max(mx,col[x]);
-  const xa=Math.round(W*0.148), xb=Math.round(W*0.868);
+  for(let y=y0;y<y1;y+=2){
+    const row=y*W;
+    for(let x=0;x<W;x++){
+      const i=(row+x)*4, r=d[i], g=d[i+1], b=d[i+2];
+      if(r>150 && g>110 && b<130 && r-b>60) col[x]++;
+    }
+  }
+  let mx=0, mean=0;
+  for(let x=0;x<W;x++){ if(col[x]>mx) mx=col[x]; mean+=col[x]; }
+  mean/=W; if(!mx) return null;
+
   const runs=[]; let st=null;
-  for(let x=xa;x<xb;x++){
-    const on=col[x]/(mx||1) > 0.45;
+  for(let x=0;x<W;x++){
+    const on = col[x]/mx > 0.45;
     if(on && st===null) st=x;
     if(!on && st!==null){ if(x-st>=3) runs.push([st,x]); st=null; }
   }
-  if(st!==null && xb-st>=3) runs.push([st,xb]);
+  if(st!==null && W-st>=3) runs.push([st,W]);
   if(runs.length<2) return null;
-  // 세로선 주기 = 자기상관 최대
-  const lo=Math.round(W*0.06), hi=Math.round(W*0.15);
-  let mean=0; for(let x=xa;x<xb;x++) mean+=col[x]; mean/=(xb-xa);
-  let pitch=lo, bestAc=-Infinity;
+
+  // 카드 간격 = 자기상관 최대
+  const lo=Math.max(40, Math.round(W*0.04)), hi=Math.round(W*0.22);
+  let pitch=lo, bp=-Infinity;
   for(let k=lo;k<hi;k++){
-    let s=0; for(let x=xa;x<xb-k;x++) s+=(col[x]-mean)*(col[x+k]-mean);
-    if(s>bestAc){ bestAc=s; pitch=k; }
+    let sum=0; for(let x=0;x+k<W;x++) sum+=(col[x]-mean)*(col[x+k]-mean);
+    if(sum>bp){ bp=sum; pitch=k; }
   }
-  const ws=runs.map(r=>r[1]-r[0]).filter(w => w>pitch*0.60 && w<pitch*0.97).sort((a,b)=>a-b);
-  const cw = ws.length ? ws[ws.length>>1] : Math.round(pitch*0.855);
-  const gx0=runs[0][0], gxe=runs[runs.length-1][1];
-  const ncol=Math.round((gxe-gx0-cw)/pitch)+1;
-  if(ncol<3 || ncol>12) return null;
-  // 가로 주기
+  // 카드 폭 = 간격의 55~99% 인 구간들의 중앙값
+  const ws=runs.map(r=>r[1]-r[0]).filter(w=>w>pitch*0.55 && w<pitch*0.99).sort((a,b)=>a-b);
+  const cw = ws.length ? ws[ws.length>>1] : Math.round(pitch*0.85);
+
+  // 카드 사이 '틈'의 위상을 찾아 카드 시작 위상을 구한다
+  const fold=new Float64Array(pitch);
+  for(let i=0;i<pitch;i++){ let s2=0,n=0; for(let x=i;x<W;x+=pitch){ s2+=col[x]; n++; } fold[i]=s2/n; }
+  let gap=0; for(let i=1;i<pitch;i++) if(fold[i]<fold[gap]) gap=i;
+  const phase=((gap + ((pitch-cw)>>1)) % pitch + pitch) % pitch;
+
+  const starts=[];
+  for(let x=phase;x<W-cw;x+=pitch){
+    let s2=0; for(let t=x;t<x+cw;t++) s2+=col[t];
+    if(s2/cw > mean*0.6) starts.push(x);
+  }
+  if(starts.length<2) return null;
+  let x0=starts[0];
+  // 실제 카드 왼쪽 테두리로 스냅
+  let bestd=pitch*0.35, snap=null;
+  runs.forEach(r=>{ const dd=Math.abs(r[0]-x0); if(dd<bestd){ bestd=dd; snap=r[0]; } });
+  if(snap!==null) x0=snap;
+  const ncol=starts.length;
+  if(ncol<2 || ncol>14) return null;
+
+  const xe=Math.min(x0+(ncol-1)*pitch+cw, W);
   const row=new Float64Array(H);
-  for(let y=0;y<H;y++){ let s=0; for(let x=gx0;x<gxe;x+=2) s+=gold((y*W+x)*4); row[y]=s; }
-  let rm=0; for(let y=0;y<H;y++) rm+=row[y]; rm/=H;
-  let per=Math.round(pitch*0.95), bp=-Infinity;
-  for(let k=Math.round(pitch*0.95); k<Math.round(pitch*1.25); k++){
-    let s=0; for(let y=0;y<H-k;y++) s+=(row[y]-rm)*(row[y+k]-rm);
-    if(s>bp){ bp=s; per=k; }
+  for(let y=0;y<H;y++){
+    let s2=0; const r0=y*W;
+    for(let x=x0;x<xe;x+=2){ const i=(r0+x)*4, r=d[i], g=d[i+1], b=d[i+2];
+      if(r>150 && g>110 && b<130 && r-b>60) s2++; }
+    row[y]=s2;
   }
-  return { ncol, x0:gx0, cw, pitch, per, W, H };
+  let rm=0; for(let y=0;y<H;y++) rm+=row[y]; rm/=H;
+  let per=Math.round(pitch*0.95), bpr=-Infinity;
+  for(let k=Math.round(pitch*0.95); k<Math.round(pitch*1.30); k++){
+    let sum=0; for(let y=0;y+k<H;y++) sum+=(row[y]-rm)*(row[y+k]-rm);
+    if(sum>bpr){ bpr=sum; per=k; }
+  }
+  return { ncol, x0, cw, pitch, per, W, H };
 }
 
 /* ── 셀에 카드가 실제로 있는가 (빈 칸·UI 가림 걸러내기) ── */
@@ -916,7 +949,7 @@ function scanShot(cv, prog){
   // 2단계 크기·오프셋
   let best={sc:-9,size:s0,dx:4,y0:yb};
   for(let size=G.cw-10; size<=G.cw+4; size+=3)
-   for(let dx=-4; dx<=10; dx+=3)
+   for(let dx=-6; dx<=14; dx+=3)
     for(let dy=-6; dy<=6; dy+=3){
       const y=yb+dy;
       if(y<Math.round(H*0.09) || y+size>H) continue;
