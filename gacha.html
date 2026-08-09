@@ -100,7 +100,8 @@ a.navlink{text-decoration:none}
 #sgrid .sc img{width:100%;height:auto;aspect-ratio:1/1;object-fit:cover;
   border-radius:6px;display:block}
 #sgrid .sc:hover{background:none;box-shadow:0 0 0 2px var(--acc)}
-#sgrid .sc .nm,#sgrid /* 보구레벨 = 이미지 위에 연한 붉은 막을 덮고 큰 숫자를 가운데 */
+#sgrid .sc .nm,#sgrid .sc .no{display:none}
+/* 보구레벨 = 이미지 위에 연한 붉은 막을 덮고 큰 숫자를 가운데 */
 #sgrid .sc.owned{background:none;box-shadow:0 0 0 2px #cf6a72}
 #sgrid .sc.owned img{filter:none}
 #sgrid .np{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
@@ -624,17 +625,22 @@ async function exportPNG(){
     await Promise.all(imgs.map(im => im.complete ? null : new Promise(r => {
       const done=()=>r(); im.onload=done; im.onerror=done; setTimeout(done, 6000);
     })));
+    // 폰은 캔버스 크기 한계가 있어서 배율을 그대로 두면 아래가 잘려 나온다.
+    // 한 변 4000px, 전체 1200만 화소를 넘지 않게 배율을 낮춘다.
+    const bw = box.offsetWidth, bh = box.offsetHeight;
+    let scale = 2;
+    while(scale > 0.5 && (bw*scale > 4000 || bh*scale > 4000 || bw*scale*bh*scale > 12e6)) scale -= 0.25;
     const cv = await html2canvas(box, {
-      backgroundColor:'#f7f5f0', scale:2, useCORS:true, allowTaint:false,
-      width: box.offsetWidth, height: box.offsetHeight,
-      windowWidth: box.offsetWidth, windowHeight: box.offsetHeight,
+      backgroundColor:'#f7f5f0', scale, useCORS:true, allowTaint:false,
+      width: bw, height: bh, windowWidth: bw, windowHeight: bh,
       scrollX:0, scrollY:0,
     });
+    if(!cv.width || !cv.height) throw new Error('이미지를 만들지 못했습니다');
     const a=document.createElement('a');
     a.href=cv.toDataURL('image/png');
     a.download=`복주머니_${new Date().toISOString().slice(0,10)}.png`;
     a.click();
-    toast('PNG를 저장했습니다');
+    toast(`PNG 저장 완료 (${cv.width}×${cv.height})`);
   }catch(e){
     toast('이미지 저장 실패 — 잠시 뒤 다시 시도해 주세요');
   }finally{
@@ -649,7 +655,7 @@ async function exportPNG(){
    ══════════════════════════════════════════════════════════ */
 let REC = null;                       // 인식 모델 (한 번만 받는다)
 const REC_TH = { s1: 0.62, gap: 0.05, card: 0.10 };
-const REC_VER = 'v7 2026-08-09';   // 인식 엔진 버전 (캐시 확인용)
+const REC_VER = 'v8 2026-08-09';   // 인식 엔진 버전 (캐시 확인용)
 
 async function loadRecModel(){
   if(REC) return REC;
