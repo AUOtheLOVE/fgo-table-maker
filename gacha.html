@@ -461,7 +461,7 @@ function renderSvt(){
 function svtCard(s){
   const np = own[s.id] || 0;
   return `<div class="sc${np?' owned':''}" data-id="${s.id}"
-      onclick="cycNP(${s.id},1)" oncontextmenu="cycNP(${s.id},-1);return false" title="${esc(s.name)} (No.${s.no})">
+      onclick="cycNP(${s.id},1)" oncontextmenu="cycNP(${s.id},-1);return false">
     <span class="no">${s.no}</span>
     ${np ? `<span class="np${np>=5?' max':''}">${np}</span>` : ''}
     <img src="${s.face}" loading="lazy" crossorigin="anonymous" alt=""/>
@@ -557,7 +557,7 @@ function faceCell(bid, id){
   let cls = 'st-new', attr = '';
   if(skip.has(id))      cls = 'st-skip';
   else if(np){ cls = 'st-own' + (np>=5 ? ' np5' : ''); attr = ` data-np="${np}"`; }
-  return `<div class="fc ${cls}"${attr} data-id="${id}" onclick="clickFace(${bid},${id})" title="${esc(nm)}${np?' · 보구'+np:''}">
+  return `<div class="fc ${cls}"${attr} data-id="${id}" onclick="clickFace(${bid},${id})">
     <span class="del" onclick="event.stopPropagation();delSvt(${bid},${id})">×</span>
     <img src="${face}" loading="lazy" crossorigin="anonymous" alt=""/>
   </div>`;
