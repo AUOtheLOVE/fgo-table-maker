@@ -142,17 +142,15 @@ a.navlink{text-decoration:none}
   border-radius:6px;overflow:hidden}
 .fc img{width:100%;height:100%;object-fit:cover;display:block;border-radius:6px}
 .fc .fn{display:none}
-/* 보유 = 붉은 막 + 보구레벨 숫자 (보유 체크 화면과 같은 표시) */
-.fc.st-own::after{content:attr(data-np);position:absolute;inset:0;
-  display:flex;align-items:center;justify-content:center;
-  background:rgba(206,38,48,.52);border-radius:6px;
-  font-size:40px;font-weight:800;line-height:1;color:#fff;
+/* 보유 = 붉은 막 + 보구레벨 숫자 / 제외 = 검정 막 */
+.fc .ov{position:absolute;inset:0;display:none;border-radius:6px;
+  align-items:center;justify-content:center;pointer-events:none;
+  font-size:40px;font-weight:800;line-height:1;color:#fff}
+.fc.st-own .ov{display:flex;background:rgba(206,38,48,.52);
   text-shadow:0 0 4px rgba(130,15,25,.98),0 0 12px rgba(90,10,15,.75),0 2px 5px rgba(0,0,0,.55)}
-.fc.st-own.np5::after{background:rgba(168,128,30,.55);
+.fc.st-own.np5 .ov{background:rgba(168,128,30,.55);
   text-shadow:0 0 4px rgba(95,72,20,.98),0 0 12px rgba(70,52,12,.75),0 2px 5px rgba(0,0,0,.55)}
-/* 제외 = 검정 막. 농도는 --skpop */
-.fc.st-skip::after{content:'';position:absolute;inset:0;border-radius:6px;
-  background:#000;opacity:var(--skpop);pointer-events:none}
+.fc.st-skip .ov{display:flex;background:#000;opacity:var(--skpop)}
 body.skipmode .fc{cursor:pointer}
 body.skipmode .fc:hover{box-shadow:inset 0 0 0 3px var(--skp)}
 body.editmode .fc{cursor:pointer}
@@ -550,12 +548,13 @@ function faceCell(bid, id){
   const face = s ? s.face : `https://static.atlasacademy.io/JP/Faces/f_${id}0.png`;
   const nm = s ? s.name : ('#' + id);
   const np = own[id] || 0;
-  let cls = 'st-new', attr = '';
+  let cls = 'st-new', txt = '';
   if(skip.has(id))      cls = 'st-skip';
-  else if(np){ cls = 'st-own' + (np>=5 ? ' np5' : ''); attr = ` data-np="${np}"`; }
-  return `<div class="fc ${cls}"${attr} data-id="${id}" onclick="clickFace(${bid},${id})">
+  else if(np){ cls = 'st-own' + (np>=5 ? ' np5' : ''); txt = String(np); }
+  return `<div class="fc ${cls}" data-id="${id}" onclick="clickFace(${bid},${id})">
     <span class="del" onclick="event.stopPropagation();delSvt(${bid},${id})">×</span>
     <img src="${face}" loading="lazy" crossorigin="anonymous" alt=""/>
+    <span class="ov">${txt}</span>
   </div>`;
 }
 
@@ -686,24 +685,49 @@ function loadFile(input){
 
 async function exportPNG(){
   if(!bags.length){ toast('내보낼 표가 없습니다'); return; }
-  const btnStates = [skipMode, editMode];
   if(skipMode) tglSkipMode();
   if(editMode) tglEditMode();
   toast('이미지 만드는 중…');
-  const target = document.getElementById('v2');
+
+  // 화면 요소를 그대로 찍으면 스크롤 영역·여백 때문에 아래가 텅 비고 끝줄이 잘린다.
+  // 표만 복제해 화면 밖 컨테이너에 담고 그것만 찍는다.
+  const wrap = document.getElementById('bagWrap');
+  const W = wrap.getBoundingClientRect().width;
+  const box = document.createElement('div');
+  box.style.cssText = `position:fixed; left:-99999px; top:0; width:${W+28}px;
+    padding:14px; background:#f7f5f0; box-sizing:border-box;`;
+  const ttl = document.createElement('div');
+  ttl.style.cssText = 'font-size:15px;font-weight:700;color:#1a1814;margin:2px 2px 11px';
+  ttl.textContent = evtLabel || '복주머니';
+  const clone = wrap.cloneNode(true);
+  clone.removeAttribute('id');
+  clone.style.cssText = getComputedStyle(wrap).cssText || '';
+  clone.style.display = 'grid';
+  clone.style.gap = '9px';
+  clone.style.gridTemplateColumns = getComputedStyle(wrap).gridTemplateColumns;
+  clone.style.width = W + 'px';
+  clone.querySelectorAll('.del,.addbtn').forEach(e => e.remove());
+  box.appendChild(ttl); box.appendChild(clone);
+  document.body.appendChild(box);
+
   try{
-    const cv = await html2canvas(target, {
+    await Promise.all([...clone.querySelectorAll('img')].map(im =>
+      im.complete ? null : new Promise(r => { im.onload=im.onerror=r; })));
+    const cv = await html2canvas(box, {
       backgroundColor:'#f7f5f0', scale:2, useCORS:true, allowTaint:false,
-      windowWidth: target.scrollWidth, height: target.scrollHeight,
-      ignoreElements: el => el.classList && el.classList.contains('bar'),
+      width: box.offsetWidth, height: box.offsetHeight,
+      windowWidth: box.offsetWidth, windowHeight: box.offsetHeight,
+      scrollX:0, scrollY:0,
     });
-    const a = document.createElement('a');
-    a.href = cv.toDataURL('image/png');
-    a.download = `fgo_확챠_${new Date().toISOString().slice(0,10)}.png`;
+    const a=document.createElement('a');
+    a.href=cv.toDataURL('image/png');
+    a.download=`복주머니_${new Date().toISOString().slice(0,10)}.png`;
     a.click();
     toast('PNG를 저장했습니다');
   }catch(e){
-    toast('이미지 저장 실패 — 이미지 로딩을 기다린 뒤 다시 시도해 주세요');
+    toast('이미지 저장 실패 — 잠시 뒤 다시 시도해 주세요');
+  }finally{
+    box.remove();
   }
 }
 
