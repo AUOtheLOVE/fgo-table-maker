@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>한그오 2025 여름확챠</title>
+<title>2026년 8월 복주머니</title>
 <meta name="description" content="복주머니 확챠 플래너. 보유 서번트와 보구레벨을 체크하면 각 복주머니의 신규 획득률을 계산해 어디를 돌릴지 알려줍니다."/>
 <meta property="og:type" content="website"/>
 <meta property="og:site_name" content="한그오 확챠 플래너"/>
-<meta property="og:title" content="한그오 2025 여름확챠"/>
+<meta property="og:title" content="2026년 8월 복주머니"/>
 <meta property="og:description" content="보유 체크 → 복주머니별 신규 획득률 자동 계산."/>
 <meta property="og:url" content="https://ryuri-r.github.io/fgo-table-maker/gacha.html"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -192,7 +192,7 @@ body.editmode .bagdel{display:block}
 <body>
 
 <div class="topbar">
-  <h1>한그오 <span>2025 여름확챠</span></h1>
+  <h1>2026년 8월 <span>복주머니</span></h1>
   <select class="sel wide" id="evtSel" onchange="changeEvent()">
     <option value="">확챠 불러오는 중…</option>
   </select>
@@ -445,7 +445,7 @@ async function loadGacha(){
     return {
       key, gachas: gs, rg: gs[0]._rg, opened: gs[0].openedAt, closed: gs[0].closedAt, isPreset,
       label: isPreset
-        ? `한그오 2025 여름확챠 (${gs.length}종 中 2번)`
+        ? `2026년 8월 복주머니 (${gs.length}종 中 2번)`
         : `${gs[0]._rg === 'KR' ? '한국' : '일본'} · ${ymd} · ${name} (${gs.length}종)`,
     };
   });
