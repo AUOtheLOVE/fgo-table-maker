@@ -574,7 +574,13 @@ function clearSkip(){
 /* ══════════ 불러오기 ══════════ */
 function loadFile(input){
   const fs = [...(input.files||[])]; if(!fs.length) return;
-  const imgs = fs.filter(f => /^image\//.test(f.type));
+  const seen = new Set();
+  const imgs = fs.filter(f => {
+    if(!/^image\//.test(f.type)) return false;
+    const k = f.name + '|' + f.size;          // 같은 파일을 두 번 고른 경우 한 번만
+    if(seen.has(k)) return false;
+    seen.add(k); return true;
+  });
   if(imgs.length){                       // 영기일람 스크린샷
     input.value = '';
     recognizeShots(imgs);
@@ -653,7 +659,7 @@ async function exportPNG(){
    ══════════════════════════════════════════════════════════ */
 let REC = null;                       // 인식 모델 (한 번만 받는다)
 const REC_TH = { s1: 0.62, gap: 0.05, card: 0.10 };
-const REC_VER = 'v4 2026-08-09';   // 인식 엔진 버전 (캐시 확인용)
+const REC_VER = 'v5 2026-08-09';   // 인식 엔진 버전 (캐시 확인용)
 
 async function loadRecModel(){
   if(REC) return REC;
@@ -1008,8 +1014,11 @@ async function recognizeShots(files){
       const strong = c.s1>=REC_TH.s1 && c.gap>=REC_TH.gap;
       const cur = found.get(c.id);
       if(strong){
-        if(!cur || c.s1>cur.s1) found.set(c.id, {np:Math.max(c.np, cur?cur.np:0), s1:c.s1, gap:c.gap});
-        else if(c.np>cur.np) cur.np=c.np;
+        // 같은 서번트가 여러 칸에서 잡히면 '숫자가 가장 또렷하게 읽힌 칸'을 쓴다.
+        // 최댓값을 취하면 한 번 잘못 읽은 큰 수가 계속 남아 고칠 수가 없다.
+        if(!cur || c.npConf > cur.npConf || (!cur.np && c.np)){
+          found.set(c.id, { np:c.np, npConf:c.npConf, s1:c.s1, gap:c.gap });
+        }
       } else weak.push(c);
     });
   }
@@ -1019,9 +1028,9 @@ async function recognizeShots(files){
 
   let added=0, upd=0;
   found.forEach((v,id) => {
-    const np = v.np || 1;
-    if(!own[id]) added++; else if(own[id]<np) upd++;
-    own[id] = Math.max(own[id]||0, np);
+    const np = v.np || own[id] || 1;
+    if(!own[id]) added++; else if(own[id] !== np) upd++;
+    own[id] = np;                      // 이번에 본 값으로 덮어쓴다 (다시 올리면 고쳐진다)
   });
   persist(); renderSvt(); renderBags(); updFoot();
   ov.classList.remove('open');
