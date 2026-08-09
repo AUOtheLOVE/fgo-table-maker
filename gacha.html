@@ -95,6 +95,15 @@ a.navlink{text-decoration:none}
   font-size:9px;font-weight:700;border-radius:4px;padding:1px 4px;letter-spacing:.02em}
 .np.max{background:var(--acc)}
 
+/* STEP1 그리드는 이름 없이 아이콘을 크게 (모달 선택창은 이름 유지) */
+#sgrid{grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:7px}
+#sgrid .sc{padding:6px 4px}
+#sgrid .sc img{width:88px;height:88px}
+#sgrid .sc .nm{display:none}
+#sgrid .sc .no{font-size:9.5px;top:3px;left:5px;
+  background:rgba(255,255,255,.82);border-radius:3px;padding:0 3px}
+#sgrid .np{font-size:10px;padding:1px 5px;top:4px;right:5px}
+
 /* ── 고정 하단바 ── */
 .foot{position:fixed;left:0;right:0;bottom:0;background:var(--s1);border-top:1px solid var(--line);
   padding:8px 14px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;z-index:30}
