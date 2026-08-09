@@ -279,11 +279,19 @@ body.editmode .bagdel{display:block}
   </div>
 </div>
 
+<!-- 인식 진행 표시 -->
+<div class="mbg" id="recOv">
+  <div class="mbox" style="width:min(360px,90vw);align-items:center;padding:26px 20px;text-align:center">
+    <div style="font-size:26px;margin-bottom:10px"><span class="spin" style="width:22px;height:22px;border-width:3px"></span></div>
+    <div id="recSt" style="font-size:12.5px;color:var(--t2)">준비 중…</div>
+    <div style="font-size:11px;color:var(--t3);margin-top:8px">사진은 이 기기 안에서만 처리되며 어디에도 보내지 않습니다</div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
 /* ══════════ STATE ══════════ */
-let region   = 'JP';
 let svtAll   = [];              // {id,no,name,face,rarity,cls}
 let svtById  = new Map();
 let gachaAll = [];              // 복주머니 원본
@@ -295,8 +303,6 @@ let skip     = new Set();       // svtId
 let step     = 1;
 let skipMode = false, editMode = false;
 let pickTarget = null;
-/* 서번트 이름·아이콘은 항상 한국 서버 기준으로 표시한다 */
-const koNames = true;
 /* 복주머니는 ★5만 나온다. 전체 보기로 전환할 때만 ★4·★3이 필요하다 */
 const RARITY = new Set([5,4,3]);
 let cFilter  = new Set();
@@ -314,7 +320,7 @@ const CLASSES = [
   ['alterEgo|foreigner|pretender|beast','엑스트라Ⅱ'],
 ];
 const LS_OWN='fgo_gp_own_v1', LS_SKIP='fgo_gp_skip_v1', LS_BAGS='fgo_gp_bags_v1',
-      LS_REG='fgo_gp_region_v1', LS_OP='fgo_gp_op_v1';
+      LS_OP='fgo_gp_op_v1';
 
 /* ══════════ INIT ══════════ */
 window.addEventListener('DOMContentLoaded', init);
@@ -352,7 +358,6 @@ function persist(){
   localStorage.setItem(LS_OWN,  JSON.stringify(own));
   localStorage.setItem(LS_SKIP, JSON.stringify([...skip]));
   localStorage.setItem(LS_BAGS, JSON.stringify({label:evtLabel, bags}));
-  localStorage.setItem(LS_REG,  region);
 }
 
 /* ══════════ 데이터 로드 ══════════ */
@@ -367,137 +372,45 @@ async function fetchJSON(url, ms=20000){
 }
 
 async function loadSvt(){
-  const j = await fetchJSON(`https://api.atlasacademy.io/export/${region}/basic_svt.json`);
-  // 확챠는 JP 기준이라도 이름·아이콘은 한국 서버 것으로 보여준다(같은 svt id 공유).
-  // 한국 미출시 서번트는 원래 리전 이름 그대로 남는다.
-  let koMap = null;
-  if(koNames && region !== 'KR'){
-    try{
-      const k = await fetchJSON('https://api.atlasacademy.io/export/KR/basic_svt.json');
-      koMap = new Map(k.filter(s => s.collectionNo > 0).map(s => [s.id, s]));
-    }catch(e){ /* 실패해도 원어로 표시 */ }
-  }
-  // type === 'normal' 만 실제 서번트다.
-  //  servantEquip=예장 / statusUp=포우군 같은 강화카드 / heroine=마슈
-  //  enemyCollectionDetail=솔로몬·티아마트·게티아처럼 도감에만 있고 못 얻는 것
-  svtAll = j
-    .filter(s => s.collectionNo > 0 && s.type === 'normal')
-    .sort((a,b) => a.collectionNo - b.collectionNo)
-    .map(s => {
-      const k = koMap && koMap.get(s.id);
-      return {
-        id: s.id,
-        no: s.collectionNo,
-        name: (k && k.name) || s.name || ('No.' + s.collectionNo),
-        face: (k && k.face) || s.face || `https://static.atlasacademy.io/${region}/Faces/f_${s.id}0.png`,
-        rarity: s.rarity || 0,
-        cls: s.className || '',
-        ko: !!k,
-      };
-    });
+  // 예전엔 Atlas 원본(KR+JP basic_svt, 4.2MB)을 매번 받았다.
+  // 필요한 필드만 추려 21KB 로 줄인 파일을 쓴다. [id, 도감번호, 이름(KR우선), 레어도, 클래스, KR출시여부]
+  const j = await fetchJSON('data/svt.json');
+  svtAll = j.map(r => ({
+    id:r[0], no:r[1], name:r[2], rarity:r[3], cls:r[4], ko:!!r[5],
+    face:`https://static.atlasacademy.io/JP/Faces/f_${r[0]}0.png`,
+  }));
   svtById = new Map(svtAll.map(s => [s.id, s]));
 }
 
 async function loadGacha(){
-  // 한국 서버 확챠가 우선이지만, 아직 안 열린 확챠는 한국 데이터에 없다.
-  // 그럴 땐 같은 구성으로 먼저 열린 일본 확챠를 빌려 쓴다. (svt id는 리전 공통)
-  const now = Date.now() / 1000;
-  const raw = [];
-  for(const rg of ['KR','JP']){
-    try{
-      const j = await fetchJSON(`https://api.atlasacademy.io/export/${rg}/nice_gacha.json`);
-      j.forEach(g => {
-        if(/복주머니|福袋/.test(g.name || '') &&
-           Array.isArray(g.featuredSvtIds) && g.featuredSvtIds.length > 0){
-          raw.push({ ...g, _rg: rg });
-        }
-      });
-    }catch(e){ /* 한쪽이 죽어도 나머지로 진행 */ }
-  }
-  gachaAll = raw;
-
-  // 서버 + 개최기간이 같은 것끼리 하나의 확챠로 묶는다
-  const map = new Map();
-  raw.forEach(g => {
-    const k = g._rg + '_' + g.openedAt + '_' + g.closedAt;
-    if(!map.has(k)) map.set(k, []);
-    map.get(k).push(g);
-  });
-
-  const all = [...map.entries()].map(([key, gs]) => {
-    gs.sort((a,b) => a.id - b.id);
-    const d = new Date(gs[0].openedAt * 1000);
-    const ymd = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-    const name = commonPrefix(gs.map(x => clean(x.name))) || clean(gs[0].name);
-    const isPreset = gs[0]._rg === 'JP' && /福袋召喚2025/.test(name);
-    return {
-      key, gachas: gs, rg: gs[0]._rg, opened: gs[0].openedAt, closed: gs[0].closedAt, isPreset,
-      label: isPreset
-        ? `2026년 8월 복주머니 (${gs.length}종 中 2번)`
-        : `${gs[0]._rg === 'KR' ? '한국' : '일본'} · ${ymd} · ${name} (${gs.length}종)`,
-    };
-  });
-
-  // 이미 끝난 확챠는 목록에서 뺀다. 단 기본 확챠는 남긴다
-  // (한국에서 곧 열릴 것이라 일본 기준으론 이미 지난 확챠다)
-  events = all
-    .filter(e => e.isPreset || e.closed >= now)
-    .sort((a,b) => (b.isPreset - a.isPreset) || (b.opened - a.opened));
-
+  // 기본 확챠는 사이트에 넣어둔 3KB 파일에서 바로 읽는다 (네트워크 대기 없음)
+  const d = await fetchJSON('data/bags.json');
+  bagCnt = 0;
+  const preset = {
+    isPreset: true,
+    label: `${d.label} (${d.bags.length}종 中 ${d.draws}번)`,
+    bags: d.bags.map(b => ({ bid: ++bagCnt, name: b.n, grp: b.g, ids: b.s.slice() })),
+  };
+  events = [preset];
   const sel = document.getElementById('evtSel');
-  sel.innerHTML = '<option value="">— 확챠를 고르세요 —</option>' +
-    events.map((e,i) => `<option value="${i}">${esc(e.label)}</option>`).join('');
-
-  if(!events.length) return;
-
-  const defIdx = Math.max(0, events.findIndex(e => e.isPreset));
-
-  // 저장된 표가 있으면 그게 어느 확챠였는지 찾아 드롭다운을 맞춰준다.
-  // (안 맞춰주면 표는 떠 있는데 선택창만 비어 보여서 안 고른 것처럼 보인다)
-  const savedIdx = evtLabel ? events.findIndex(e => e.label === evtLabel) : -1;
-
-  if(bags.length && savedIdx >= 0){
-    sel.value = String(savedIdx);          // 이어서 쓰던 확챠 복원
-  } else if(bags.length){
-    sel.value = '';                        // 직접 구성한 표 — 매칭되는 확챠 없음
-  } else {
-    sel.value = String(defIdx);            // 처음이면 기본 확챠를 잡아준다
-    changeEvent();
+  sel.innerHTML = `<option value="0">${esc(preset.label)}</option>`;
+  sel.value = '0';
+  if(!bags.length){                       // 처음이면 기본 확챠를 그대로 쓴다
+    bags = preset.bags.map(b => ({...b, ids:b.ids.slice()}));
+    evtLabel = preset.label;
+    persist();
   }
 }
 
-function clean(s){ return (s||'').replace(/[\r\n]+/g,' ').trim(); }
-function commonPrefix(arr){
-  if(!arr.length) return '';
-  let p = arr[0];
-  arr.forEach(s => { let i=0; while(i<p.length && i<s.length && p[i]===s[i]) i++; p = p.slice(0,i); });
-  return p.replace(/[\s(（【･・|]+$/,'').trim();
-}
-
-/* ══════════ 확챠 선택 ══════════ */
 function changeEvent(){
   const i = document.getElementById('evtSel').value;
   if(i === '') return;
   const ev = events[+i];
-  const pre = commonPrefix(ev.gachas.map(g=>clean(g.name)));
-  bagCnt = 0;
-  bags = ev.gachas.map(g => {
-    const nm = clean(g.name);
-    const short = (pre && nm.startsWith(pre) ? nm.slice(pre.length) : nm)
-      .replace(/^[\s(（]+/,'').replace(/[)）]+$/,'').trim() || nm;
-    return { bid: ++bagCnt, name: short, grp: grpOf(nm), ids: g.featuredSvtIds.slice() };
-  });
+  if(!ev) return;
+  bags = ev.bags.map(b => ({...b, ids:b.ids.slice()}));
   evtLabel = ev.label;
-  persist();
-  renderBags();
-  if(!showAll) renderSvt();   // 확챠가 바뀌면 대상 목록도 바뀐다
-  toast(`${bags.length}개 복주머니를 불러왔습니다`);
-}
-
-function grpOf(nm){
-  if(/紅|여성|여자/.test(nm)) return 'R';
-  if(/白|남성|남자/.test(nm)) return 'W';
-  return 'N';
+  persist(); renderBags();
+  if(!showAll) renderSvt();
 }
 
 /* ══════════ STEP 1 : 보유 체크 ══════════ */
@@ -637,7 +550,7 @@ function setOp(v){
 
 function faceCell(bid, id){
   const s = svtById.get(id);
-  const face = s ? s.face : `https://static.atlasacademy.io/${region}/Faces/f_${id}0.png`;
+  const face = s ? s.face : `https://static.atlasacademy.io/JP/Faces/f_${id}0.png`;
   const nm = s ? s.name : ('#' + id);
   let st, tag;
   if(skip.has(id))      { st='st-skip'; tag='제외'; }
@@ -742,7 +655,7 @@ function addSvt(id){
 
 /* ══════════ 저장 / 불러오기 ══════════ */
 function saveFile(){
-  const payload = { v:1, region, label:evtLabel, own, skip:[...skip], bags, savedAt:new Date().toISOString() };
+  const payload = { v:1, label:evtLabel, own, skip:[...skip], bags, savedAt:new Date().toISOString() };
   const blob = new Blob([JSON.stringify(payload, null, 1)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -799,17 +712,295 @@ async function exportPNG(){
   }
 }
 
-/* ══════════ 캡쳐 인식 ══════════ */
-/* 영기일람 스크린샷 → 격자 검출 → 얼굴 대조 → 보유·보구레벨 자동 입력.
-   여러 장을 한 번에 올려도 되고, 겹친 줄은 서번트 ID 기준으로 자동 합쳐진다. */
+/* ══════════════════════════════════════════════════════════
+   캡쳐 인식 엔진
+   영기일람 스크린샷 → 격자 검출 → 자기보정 → 얼굴 대조 → 보구 숫자
+   여러 장을 한 번에 올려도 되고, 겹친 줄은 서번트 ID로 자동 합쳐진다.
+   ══════════════════════════════════════════════════════════ */
+let REC = null;                       // 인식 모델 (한 번만 받는다)
+const REC_TH = { s1: 0.62, gap: 0.05, card: 0.10 };
+
+async function loadRecModel(){
+  if(REC) return REC;
+  const [meta, dg, buf] = await Promise.all([
+    fetchJSON('data/faces.json'),
+    fetchJSON('data/digits.json'),
+    fetch('data/faces.bin').then(r => r.arrayBuffer()),
+  ]);
+  const raw = new Int8Array(buf), n = meta.n, dim = meta.dim;
+  // int8 → 평균 제거 후 단위벡터 (양자화 스케일은 정규화로 사라진다)
+  const M = new Float32Array(n * dim);
+  for(let i=0;i<n;i++){
+    const o=i*dim; let s=0;
+    for(let j=0;j<dim;j++) s += raw[o+j];
+    const m = s/dim; let q=0;
+    for(let j=0;j<dim;j++){ const v = raw[o+j]-m; M[o+j]=v; q+=v*v; }
+    const inv = 1/(Math.sqrt(q)||1);
+    for(let j=0;j<dim;j++) M[o+j]*=inv;
+  }
+  // 숫자 모델도 같은 방식
+  const dn = dg.x.length, dd = dg.x[0].length;
+  const DX = new Float32Array(dn*dd);
+  for(let i=0;i<dn;i++){
+    const r=dg.x[i]; let s=0;
+    for(let j=0;j<dd;j++) s+=r[j];
+    const m=s/dd; let q=0;
+    for(let j=0;j<dd;j++){ const v=r[j]-m; DX[i*dd+j]=v; q+=v*v; }
+    const inv=1/(Math.sqrt(q)||1);
+    for(let j=0;j<dd;j++) DX[i*dd+j]*=inv;
+  }
+  REC = { meta, M, ids: meta.ids, S: meta.S, box: meta.box, dim,
+          dg: { X: DX, Y: dg.y, n: dn, d: dd, box: dg.box, w: dg.w, h: dg.h } };
+  return REC;
+}
+
+/* ── 이미지 → 픽셀 ── */
+function toCanvas(img){
+  const cv = document.createElement('canvas');
+  cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+  cv.getContext('2d', {willReadFrequently:true}).drawImage(img,0,0);
+  return cv;
+}
+function loadImg(file){
+  return new Promise((res,rej)=>{
+    const u=URL.createObjectURL(file), im=new Image();
+    im.onload=()=>{ URL.revokeObjectURL(u); res(im); };
+    im.onerror=()=>{ URL.revokeObjectURL(u); rej(new Error('이미지를 열 수 없습니다')); };
+    im.src=u;
+  });
+}
+
+/* ── 격자 검출: 카드의 금색 테두리를 세로/가로로 투영해 간격을 잰다 ── */
+function detectGrid(cv){
+  const W=cv.width, H=cv.height;
+  const d=cv.getContext('2d').getImageData(0,0,W,H).data;
+  const gold=(i)=>{ const r=d[i],g=d[i+1],b=d[i+2];
+    return (r>150 && g>110 && b<130 && r-b>60) ? 1 : 0; };
+  const y0=Math.round(H*0.28), y1=Math.round(H*0.93);
+  const col=new Float64Array(W);
+  for(let y=y0;y<y1;y+=2) for(let x=0;x<W;x++) col[x]+=gold((y*W+x)*4);
+  let mx=0; for(let x=0;x<W;x++) mx=Math.max(mx,col[x]);
+  const xa=Math.round(W*0.148), xb=Math.round(W*0.868);
+  const runs=[]; let st=null;
+  for(let x=xa;x<xb;x++){
+    const on=col[x]/(mx||1) > 0.45;
+    if(on && st===null) st=x;
+    if(!on && st!==null){ if(x-st>=3) runs.push([st,x]); st=null; }
+  }
+  if(st!==null && xb-st>=3) runs.push([st,xb]);
+  if(runs.length<2) return null;
+  // 세로선 주기 = 자기상관 최대
+  const lo=Math.round(W*0.06), hi=Math.round(W*0.15);
+  let mean=0; for(let x=xa;x<xb;x++) mean+=col[x]; mean/=(xb-xa);
+  let pitch=lo, bestAc=-Infinity;
+  for(let k=lo;k<hi;k++){
+    let s=0; for(let x=xa;x<xb-k;x++) s+=(col[x]-mean)*(col[x+k]-mean);
+    if(s>bestAc){ bestAc=s; pitch=k; }
+  }
+  const ws=runs.map(r=>r[1]-r[0]).filter(w => w>pitch*0.60 && w<pitch*0.97).sort((a,b)=>a-b);
+  const cw = ws.length ? ws[ws.length>>1] : Math.round(pitch*0.855);
+  const gx0=runs[0][0], gxe=runs[runs.length-1][1];
+  const ncol=Math.round((gxe-gx0-cw)/pitch)+1;
+  if(ncol<3 || ncol>12) return null;
+  // 가로 주기
+  const row=new Float64Array(H);
+  for(let y=0;y<H;y++){ let s=0; for(let x=gx0;x<gxe;x+=2) s+=gold((y*W+x)*4); row[y]=s; }
+  let rm=0; for(let y=0;y<H;y++) rm+=row[y]; rm/=H;
+  let per=Math.round(pitch*0.95), bp=-Infinity;
+  for(let k=Math.round(pitch*0.95); k<Math.round(pitch*1.25); k++){
+    let s=0; for(let y=0;y<H-k;y++) s+=(row[y]-rm)*(row[y+k]-rm);
+    if(s>bp){ bp=s; per=k; }
+  }
+  return { ncol, x0:gx0, cw, pitch, per, W, H };
+}
+
+/* ── 셀에 카드가 실제로 있는가 (빈 칸·UI 가림 걸러내기) ── */
+function cardPresence(ctx,x,y,size,vish){
+  const t=Math.max(3, size/22|0);
+  const im=ctx.getImageData(x,y,size,vish).data;
+  let hit=0, tot=0;
+  const scan=(px,py)=>{
+    const i=((py*size)+px)*4, r=im[i],g=im[i+1],b=im[i+2];
+    tot++; if(r>120 && r-b>35 && g>90) hit++;
+  };
+  for(let py=0;py<t;py++) for(let px=0;px<size;px+=2) scan(px,py);
+  for(let py=0;py<vish;py+=2){ for(let px=0;px<t;px++) scan(px,py); for(let px=size-t;px<size;px++) scan(px,py); }
+  if(vish>=size) for(let py=vish-t;py<vish;py++) for(let px=0;px<size;px+=2) scan(px,py);
+  return tot ? hit/tot : 0;
+}
+
+/* ── 카드 얼굴 → 특징 벡터 ──
+   축소는 캔버스에 맡기지 않고 직접 면적 평균한다.
+   브라우저마다 drawImage 축소 필터가 달라서, 맡기면 같은 사진도 기기마다 값이 달라진다.
+   (FGA가 OpenCV INTER_AREA 로 고정해 쓰는 것과 같은 이유) */
+function boxDown(ctx, l, t, w, h, OW, OH, ch){
+  const src=ctx.getImageData(l,t,w,h).data, out=new Float32Array(OW*OH*ch);
+  for(let oy=0;oy<OH;oy++){
+    const y0=(oy*h/OH)|0, y1=Math.max(y0+1, ((oy+1)*h/OH)|0);
+    for(let ox=0;ox<OW;ox++){
+      const x0=(ox*w/OW)|0, x1=Math.max(x0+1, ((ox+1)*w/OW)|0);
+      let r=0,g=0,b=0,n=0;
+      for(let yy=y0;yy<y1;yy++){
+        let i=(yy*w+x0)*4;
+        for(let xx=x0;xx<x1;xx++,i+=4){ r+=src[i]; g+=src[i+1]; b+=src[i+2]; n++; }
+      }
+      const o=(oy*OW+ox)*ch;
+      if(ch===3){ out[o]=r/n; out[o+1]=g/n; out[o+2]=b/n; }
+      else out[o]=(r*0.299+g*0.587+b*0.114)/n;
+    }
+  }
+  return out;
+}
+function normalize(v){
+  const n=v.length; let m=0;
+  for(let i=0;i<n;i++) m+=v[i]; m/=n;
+  let q=0; for(let i=0;i<n;i++){ v[i]-=m; q+=v[i]*v[i]; }
+  if(q<1e-9) return null;
+  const inv=1/Math.sqrt(q);
+  for(let i=0;i<n;i++) v[i]*=inv;
+  return v;
+}
+function faceVec(ctx, x, y, cs, vish, S, box){
+  const l=x+(box[0]*cs|0), r=x+(box[2]*cs|0);
+  const t=y+(box[1]*cs|0), b=y+Math.min(box[3]*cs|0, vish);
+  if(b-t<6 || r-l<6) return null;
+  return normalize(boxDown(ctx, l, t, r-l, b-t, S, S, 3));
+}
+/* 벡터 하나를 전체 레퍼런스와 대조 → 1등·2등(다른 서번트) */
+function matchFace(v, stride){
+  const {M,ids,dim}=REC, n=ids.length;
+  let b1=-2,i1=-1,b2=-2;
+  for(let i=0;i<n;i+= (stride||1)){
+    const o=i*dim; let s=0;
+    for(let j=0;j<dim;j++) s+=M[o+j]*v[j];
+    if(s>b1){ if(ids[i1]!==ids[i]) b2=b1; b1=s; i1=i; }
+    else if(s>b2 && ids[i]!==ids[i1]) b2=s;
+  }
+  return { id: ids[i1], s1: b1, gap: b1-b2 };
+}
+/* 보구 숫자 — 흰 글자만 남기고 학습해둔 72개 표본과 최근접 비교 */
+function readNP(ctx,x,y,cs){
+  const g=REC.dg, bx=g.box;
+  const l=x+(bx[0]*cs|0), t=y+(bx[1]*cs|0), r=x+(bx[2]*cs|0), b=y+(bx[3]*cs|0);
+  if(r-l<3 || b-t<3) return {np:0,conf:0};
+  const lum=boxDown(ctx, l, t, r-l, b-t, g.w, g.h, 1);
+  const n=g.w*g.h, v=new Float32Array(n);
+  for(let i=0;i<n;i++) v[i] = lum[i]>195 ? 1 : 0;
+  if(!normalize(v)) return {np:0,conf:0};
+  let best=-2, bi=0;
+  for(let i=0;i<g.n;i++){
+    const o=i*g.d; let s=0;
+    for(let j=0;j<g.d;j++) s+=g.X[o+j]*v[j];
+    if(s>best){ best=s; bi=i; }
+  }
+  return { np: g.Y[bi], conf: best };
+}
+
+/* ── 한 장 처리 ── */
+function scanShot(cv, prog){
+  const ctx=cv.getContext('2d', {willReadFrequently:true});
+  const G=detectGrid(cv);
+  if(!G) return { ok:false, reason:'격자를 찾지 못했습니다' };
+  const H=G.H, S=REC.S, box=REC.box;
+  const rowScore=(size,dx,yy,maxRows)=>{
+    let tot=0,k=0;
+    for(let y=yy; y+size<=H && k<maxRows; y+=G.per){
+      for(let c=0;c<G.ncol;c++){
+        const v=faceVec(ctx, G.x0+dx+c*G.pitch, y, size, size, S, box);
+        if(v) tot+=matchFace(v, 4).s1;      // 보정 단계는 1/4만 훑어 빠르게
+      }
+      k++;
+    }
+    return k? tot/k : -9;
+  };
+  // 1단계 행 위상 — 한 주기를 훑되 여러 행 점수를 합산한다.
+  // 한 행만 보면 배경이 우연히 맞아 엉뚱한 위치에 고정되는 일이 생긴다.
+  const s0=G.cw-4; let yb=Math.round(H*0.12), bA=-9;
+  for(let y=Math.round(H*0.11); y<Math.round(H*0.11)+G.per; y+=3){
+    if(y+s0>H) break;
+    const t=rowScore(s0,4,y,3);
+    if(t>bA){ bA=t; yb=y; }
+  }
+  // 2단계 크기·오프셋
+  let best={sc:-9,size:s0,dx:4,y0:yb};
+  for(let size=G.cw-10; size<=G.cw+4; size+=3)
+   for(let dx=-4; dx<=10; dx+=3)
+    for(let dy=-6; dy<=6; dy+=3){
+      const y=yb+dy;
+      if(y<Math.round(H*0.09) || y+size>H) continue;
+      const t=rowScore(size,dx,y,2);
+      if(t>best.sc) best={sc:t,size,dx,y0:y};
+    }
+  const {size,dx,y0}=best, out=[];
+  for(let y=y0; y<H; y+=G.per){
+    const vish=Math.min(H,y+size)-y;
+    if(vish/size < 0.45) continue;
+    for(let c=0;c<G.ncol;c++){
+      const x=G.x0+dx+c*G.pitch;
+      if(x+size>cv.width) continue;
+      if(cardPresence(ctx,x,y,size,vish) < REC_TH.card) continue;
+      const v=faceVec(ctx,x,y,size,vish,S,box);
+      if(!v) continue;
+      const m=matchFace(v);
+      const np=(vish>=size*0.98) ? readNP(ctx,x,y,size) : {np:0,conf:0};
+      out.push({ ...m, np:np.np, npConf:np.conf, x, y, size, vis:vish/size });
+    }
+    if(prog) prog();
+  }
+  return { ok:true, cells:out, grid:{...G,size,dx,y0} };
+}
+
+/* ── 진입점 ── */
 async function recognizeShots(files){
-  toast(`캡쳐 ${files.length}장 — 인식 엔진 연결 전입니다`);
-  alert(
-    `캡쳐 ${files.length}장을 받았습니다.\n\n` +
-    `자동 인식은 아직 붙이지 않았습니다.\n` +
-    `지금은 아래 그리드에서 직접 클릭해 주세요.\n\n` +
-    `(클릭 = 미보유 → 보구1 → 2 → 3 → 4 → 5, 우클릭은 역방향)`
-  );
+  const ov=document.getElementById('recOv'); ov.classList.add('open');
+  const st=document.getElementById('recSt');
+  st.textContent='인식 모델을 받는 중… (첫 실행만 1.5MB)';
+  try{ await loadRecModel(); }
+  catch(e){ st.textContent='모델을 받지 못했습니다.'; return; }
+
+  const found = new Map();     // svtId -> {np, s1, gap, thumb}
+  const weak  = [];
+  let bad=0;
+  for(let i=0;i<files.length;i++){
+    st.textContent = `캡쳐 ${i+1}/${files.length} 분석 중…`;
+    await new Promise(r=>setTimeout(r,10));
+    let cv;
+    try{ cv = toCanvas(await loadImg(files[i])); }catch(e){ bad++; continue; }
+    const r = scanShot(cv);
+    if(!r.ok){ bad++; continue; }
+    // 카드의 절반 이상이 낮은 점수면 이 장은 신뢰하지 않는다
+    const okCnt = r.cells.filter(c => c.s1>=REC_TH.s1).length;
+    if(r.cells.length && okCnt < r.cells.length*0.5){ bad++; continue; }
+    r.cells.forEach(c => {
+      const strong = c.s1>=REC_TH.s1 && c.gap>=REC_TH.gap;
+      const cur = found.get(c.id);
+      if(strong){
+        if(!cur || c.s1>cur.s1) found.set(c.id, {np:Math.max(c.np, cur?cur.np:0), s1:c.s1, gap:c.gap});
+        else if(c.np>cur.np) cur.np=c.np;
+      } else weak.push(c);
+    });
+  }
+  // 확신 없던 칸도 다른 장에서 확정됐으면 살린다
+  const rescued = weak.filter(c => found.has(c.id)).length;
+  const left    = weak.filter(c => !found.has(c.id));
+
+  let added=0, upd=0;
+  found.forEach((v,id) => {
+    const np = v.np || 1;
+    if(!own[id]) added++; else if(own[id]<np) upd++;
+    own[id] = Math.max(own[id]||0, np);
+  });
+  persist(); renderSvt(); renderBags(); updFoot();
+  ov.classList.remove('open');
+  const msg = [
+    `캡쳐 ${files.length}장에서 서번트 ${found.size}기를 찾았습니다.`,
+    `  새로 추가 ${added}기 · 보구레벨 갱신 ${upd}기`,
+    rescued ? `  애매했지만 다른 캡쳐로 확인된 칸 ${rescued}개` : '',
+    left.length ? `  끝내 확인 못 한 칸 ${left.length}개 — 직접 눌러주세요` : '',
+    bad ? `\n인식하지 못한 캡쳐 ${bad}장 (영기일람 화면 전체가 나오게 다시 찍어주세요)` : '',
+  ].filter(Boolean).join('\n');
+  alert(msg);
+  toast(`${found.size}기 인식 완료`);
 }
 
 /* ══════════ UTIL ══════════ */
