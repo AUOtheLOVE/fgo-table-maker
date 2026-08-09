@@ -348,15 +348,11 @@ async function init(){
 function restoreLocal(){
   try{ own  = JSON.parse(localStorage.getItem(LS_OWN)  || '{}'); }catch(e){ own={}; }
   try{ skip = new Set(JSON.parse(localStorage.getItem(LS_SKIP) || '[]')); }catch(e){ skip=new Set(); }
-  try{
-    const b = JSON.parse(localStorage.getItem(LS_BAGS) || 'null');
-    if(b && b.bags){ bags = b.bags; evtLabel = b.label || ''; bagCnt = bags.length; }
-  }catch(e){}
+  localStorage.removeItem(LS_BAGS);      // 옛 버전이 저장해둔 확챠표 청소
 }
 function persist(){
   localStorage.setItem(LS_OWN,  JSON.stringify(own));
   localStorage.setItem(LS_SKIP, JSON.stringify([...skip]));
-  localStorage.setItem(LS_BAGS, JSON.stringify({label:evtLabel, bags}));
 }
 
 /* ══════════ 데이터 로드 ══════════ */
@@ -394,13 +390,10 @@ async function loadGacha(){
   const sel = document.getElementById('evtSel');
   sel.innerHTML = `<option value="0">${esc(preset.label)}</option>`;
   sel.value = '0';
-  // 브라우저에 예전 확챠가 저장돼 있으면 그것부터 밀어낸다.
-  // (안 그러면 확챠가 바뀌어도 옛 표가 계속 남아 다른 확챠를 보게 된다)
-  if(!bags.length || evtLabel !== preset.label){
-    bags = preset.bags.map(b => ({...b, ids:b.ids.slice()}));
-    evtLabel = preset.label;
-    persist();
-  }
+  // 확챠표는 사용자 데이터가 아니라 파일에서 오는 값이다. 항상 새로 읽는다.
+  // (저장해뒀더니 확챠·이름이 바뀌어도 옛 표가 계속 남는 사고가 났다)
+  bags = preset.bags.map(b => ({...b, ids:b.ids.slice()}));
+  evtLabel = preset.label;
 }
 
 function changeEvent(){
