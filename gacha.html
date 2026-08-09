@@ -636,16 +636,80 @@ async function exportPNG(){
       scrollX:0, scrollY:0,
     });
     if(!cv.width || !cv.height) throw new Error('이미지를 만들지 못했습니다');
-    const a=document.createElement('a');
-    a.href=cv.toDataURL('image/png');
-    a.download=`복주머니_${new Date().toISOString().slice(0,10)}.png`;
-    a.click();
-    toast(`PNG 저장 완료 (${cv.width}×${cv.height})`);
+    const name = `복주머니_${new Date().toISOString().slice(0,10)}.png`;
+    const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+    if(!blob) throw new Error('이미지를 만들지 못했습니다');
+    await savePNG(blob, name, cv.width, cv.height);
   }catch(e){
     toast('이미지 저장 실패 — 잠시 뒤 다시 시도해 주세요');
   }finally{
     box.remove();
   }
+}
+
+/* 아이폰 Safari 는 링크의 download 속성을 무시한다. 눌러도 아무 일이 없거나
+   사진앱이 아닌 엉뚱한 곳으로 가서 "받았는데 안 보인다"가 된다.
+   그래서 공유시트(사진에 저장)를 먼저 쓰고, 안 되면 이미지를 띄워
+   길게 눌러 저장하게 한다. 안드로이드·PC 는 기존대로 바로 내려받는다. */
+const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+async function savePNG(blob, name, w, h){
+  const file = new File([blob], name, {type:'image/png'});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{
+      await navigator.share({files:[file], title:name});
+      toast('저장했습니다');
+      return;
+    }catch(err){
+      if(err && err.name === 'AbortError') return;   // 사용자가 직접 닫음
+      // 화면을 그리는 데 시간이 걸려 '누른 직후'가 아니게 되면 막힌다 → 아래로 넘어간다
+    }
+  }
+  if(!isIOS){
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 10000);
+    toast(`PNG 저장 완료 (${w}×${h})`);
+    return;
+  }
+  showSaveSheet(blob, name, file);
+}
+
+/* 아이폰 대비책 — 만든 이미지를 그대로 띄운다. 길게 눌러 '사진에 추가'가 확실하다. */
+function showSaveSheet(blob, name, file){
+  const url = URL.createObjectURL(blob);
+  const ov = document.createElement('div');
+  ov.style.cssText = `position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.82);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:12px; padding:16px; box-sizing:border-box;`;
+  ov.innerHTML = `
+    <div style="color:#fff;font-size:15px;line-height:1.5;text-align:center">
+      이미지를 <b>길게 눌러</b> ‘사진에 추가’를 선택하세요
+    </div>
+    <img src="${url}" alt="확챠표"
+         style="max-width:100%;max-height:66vh;border-radius:8px;background:#f7f5f0">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+      <button id="pngShare" style="padding:11px 18px;font-size:15px;border:0;border-radius:8px;
+        background:#c2453f;color:#fff">공유 / 저장</button>
+      <button id="pngClose" style="padding:11px 18px;font-size:15px;border:0;border-radius:8px;
+        background:#fff;color:#222">닫기</button>
+    </div>`;
+  const close = () => { ov.remove(); setTimeout(()=>URL.revokeObjectURL(url), 1000); };
+  ov.querySelector('#pngClose').onclick = close;
+  ov.querySelector('#pngShare').onclick = async () => {
+    // 여기서는 방금 누른 직후라 공유시트가 확실히 열린다
+    try{
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        await navigator.share({files:[file], title:name});
+        close(); return;
+      }
+    }catch(err){ if(err && err.name === 'AbortError') return; }
+    window.open(url, '_blank');
+  };
+  document.body.appendChild(ov);
 }
 
 /* ══════════════════════════════════════════════════════════
