@@ -682,8 +682,21 @@ async function exportPNG(){
    길게 눌러 저장하게 한다. 안드로이드·PC 는 기존대로 바로 내려받는다. */
 const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent)
   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+/* 윈도우·맥에서도 공유가 되긴 하지만, 공유창이 뜨면 정작 다운로드가 막힌다.
+   PC 는 그냥 내려받는 게 맞다. 공유시트는 폰에서만 쓴다. */
+const isMobile = isIOS || /Android/.test(navigator.userAgent);
+
+function download(blob, name, w, h){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 10000);
+  toast(`PNG 저장 완료 (${w}×${h})`);
+}
 
 async function savePNG(blob, name, w, h){
+  if(!isMobile) return download(blob, name, w, h);   // PC 는 바로 내려받기
   const file = new File([blob], name, {type:'image/png'});
   if(navigator.canShare && navigator.canShare({files:[file]})){
     try{
@@ -695,16 +708,8 @@ async function savePNG(blob, name, w, h){
       // 화면을 그리는 데 시간이 걸려 '누른 직후'가 아니게 되면 막힌다 → 아래로 넘어간다
     }
   }
-  if(!isIOS){
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = name;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url), 10000);
-    toast(`PNG 저장 완료 (${w}×${h})`);
-    return;
-  }
-  showSaveSheet(blob, name, file);
+  if(!isIOS) return download(blob, name, w, h);      // 안드로이드는 다운로드함에 들어간다
+  showSaveSheet(blob, name, file);                   // 아이폰만 길게 눌러 저장
 }
 
 /* 아이폰 대비책 — 만든 이미지를 그대로 띄운다. 길게 눌러 '사진에 추가'가 확실하다. */
