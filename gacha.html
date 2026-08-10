@@ -643,16 +643,25 @@ function loadFile(input){
 async function bakePNG(box, name, maxScale){
   document.body.appendChild(box);
   try{
-    // 화면 밖 요소는 lazy 로딩이 영영 시작되지 않아 그대로 두면 무한 대기한다
+    /* 화면 밖 요소는 lazy 로딩이 영영 시작되지 않아 그대로 두면 무한 대기한다.
+       1단계 그림은 아이콘이 200장 가까이라 6초로는 폰에서 절반도 못 받는다.
+       장수에 맞춰 기다리고, 얼마나 받았는지 알려준다. */
     const imgs=[...box.querySelectorAll('img')];
     imgs.forEach(im => { im.loading='eager'; if(!im.src) im.src=im.getAttribute('src')||''; });
-    await Promise.all(imgs.map(im => im.complete ? null : new Promise(r => {
-      const done=()=>r(); im.onload=done; im.onerror=done; setTimeout(done, 6000);
+    const wait = Math.min(40000, 8000 + imgs.length*80);
+    let done=0;
+    await Promise.all(imgs.map(im => im.complete ? (done++, null) : new Promise(r => {
+      const fin=()=>{ done++; r(); };
+      im.onload=fin; im.onerror=fin; setTimeout(r, wait);
     })));
+    if(imgs.length && done < imgs.length*0.9)
+      toast(`아이콘 ${done}/${imgs.length}장만 받았습니다 — 그대로 만듭니다`);
     // 폰은 캔버스 크기 한계가 있어서 배율을 그대로 두면 아래가 잘려 나온다.
     const bw = box.offsetWidth, bh = box.offsetHeight;
     let scale = maxScale || 2;
-    while(scale > 0.5 && (bw*scale > 4000 || bh*scale > 4000 || bw*scale*bh*scale > 12e6)) scale -= 0.25;
+    // 폰은 캔버스 상한이 낮다. PNG 로 굽다가 조용히 실패하는 걸 막으려 여유를 더 둔다.
+    const MAXPX = isIOS || /Android/.test(navigator.userAgent) ? 8e6 : 12e6;
+    while(scale > 0.4 && (bw*scale > 4000 || bh*scale > 4000 || bw*scale*bh*scale > MAXPX)) scale -= 0.2;
     const cv = await html2canvas(box, {
       backgroundColor:'#f7f5f0', scale, useCORS:true, allowTaint:false,
       width: bw, height: bh, windowWidth: bw, windowHeight: bh, scrollX:0, scrollY:0,
@@ -662,7 +671,8 @@ async function bakePNG(box, name, maxScale){
     if(!blob) throw new Error('이미지를 만들지 못했습니다');
     await savePNG(blob, name, cv.width, cv.height);
   }catch(e){
-    toast('이미지 저장 실패 — 잠시 뒤 다시 시도해 주세요');
+    // 원인을 감추면 제보를 받아도 손을 못 댄다
+    toast('이미지 저장 실패 — ' + ((e && e.message) || e));
   }finally{ box.remove(); }
 }
 
