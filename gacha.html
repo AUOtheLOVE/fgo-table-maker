@@ -93,6 +93,14 @@ a.navlink{text-decoration:none}
 .np{position:absolute;top:3px;right:3px;background:var(--new);color:#fff;
   font-size:9px;font-weight:700;border-radius:4px;padding:1px 4px;letter-spacing:.02em}
 .np.max{background:var(--acc)}
+/* 지금 서버에 아직 안 나온 서번트 — 흐리게. 지워버리면 있는 줄도 모른다 */
+.sgrid .sc.off img{opacity:.30;filter:grayscale(.7)}
+.sgrid .sc.off .np{opacity:.45}
+/* 한국/일본 서버 고르기 */
+.srvsel{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;
+  margin-right:8px;vertical-align:-2px}
+.srvsel .srv{padding:2px 8px;font-size:11px;font-weight:600;color:var(--t3);cursor:pointer;background:var(--s1)}
+.srvsel .srv.on{background:var(--acc);color:#fff}
 
 /* STEP1 그리드 = 이미지만. 카드 여백·테두리 없이 아이콘이 칸을 꽉 채운다 */
 .sgrid{grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:5px}
@@ -328,7 +336,40 @@ const CLASSES = [
   ['alterEgo|foreigner|pretender|beast','엑스트라Ⅱ'],
 ];
 const LS_OWN='fgo_gp_own_v1', LS_SKIP='fgo_gp_skip_v1', LS_BAGS='fgo_gp_bags_v1',
-      LS_OP='fgo_gp_op_v1';
+      LS_OP='fgo_gp_op_v1', LS_SRV='fgo_gp_srv_v1';
+
+/* ★5 배포 서번트 — 확챠에 안 나오므로 목록·통계에서 뺀다.
+   Atlas 원본에 '배포' 여부 필드가 없어 도감번호로 직접 관리한다.
+   FGO 9년간 ★5 배포는 솔로몬(459) 하나뿐이라 목록 유지 비용은 사실상 없다. */
+const WELFARE_NO = new Set([459]);
+
+/* 어느 서버 기준으로 셀지. 한국은 리처드 1세(432)가 끝이라 컷오프 번호를 따로 두지 않고
+   KR출시 플래그를 쓴다. 데이터만 갱신하면 컷오프가 저절로 최신이 된다. */
+let srv = 'KR';          // 'KR' | 'JP'
+let srvManual = false;   // 사용자가 직접 고르면 캡쳐 판별로 덮어쓰지 않는다
+
+const isGachaSvt = s => s.rarity === 5 && !WELFARE_NO.has(s.no);
+const inServer   = s => srv === 'JP' || s.kr === 1;
+
+/* 보구레벨 합계와 보유율. 분모는 서버별 확챠 대상 ★5. */
+function calcStats(){
+  const pool  = svtAll.filter(s => isGachaSvt(s) && inServer(s));
+  const owned = pool.filter(s => own[s.id] > 0);
+  const sum   = owned.reduce((a,s) => a + own[s.id], 0);
+  return { sum, cnt:owned.length, total:pool.length,
+           pct: pool.length ? owned.length/pool.length*100 : 0 };
+}
+function statText(){
+  const t = calcStats();
+  return `보렙총합 ${t.sum} · ★5 ${t.cnt}/${t.total} (${t.pct.toFixed(1)}%)`;
+}
+function setSrv(v, manual){
+  if(srv === v && !manual) return;
+  srv = v;
+  if(manual) srvManual = true;
+  localStorage.setItem(LS_SRV, JSON.stringify({srv, manual:srvManual}));
+  renderSvt(); updFoot();
+}
 
 /* ══════════ INIT ══════════ */
 window.addEventListener('DOMContentLoaded', init);
@@ -358,6 +399,8 @@ function restoreLocal(){
   try{ own  = JSON.parse(localStorage.getItem(LS_OWN)  || '{}'); }catch(e){ own={}; }
   try{ skip = new Set(JSON.parse(localStorage.getItem(LS_SKIP) || '[]')); }catch(e){ skip=new Set(); }
   localStorage.removeItem(LS_BAGS);      // 옛 버전이 저장해둔 확챠표 청소
+  try{ const v=JSON.parse(localStorage.getItem(LS_SRV)||'null');
+       if(v){ srv=v.srv==='JP'?'JP':'KR'; srvManual=!!v.manual; } }catch(e){}
 }
 function persist(){
   localStorage.setItem(LS_OWN,  JSON.stringify(own));
@@ -380,7 +423,7 @@ async function loadSvt(){
   // 필요한 필드만 추려 21KB 로 줄인 파일을 쓴다. [id, 도감번호, 이름(KR우선), 레어도, 클래스, KR출시여부]
   const j = await fetchJSON('data/svt.json');
   svtAll = j.map(r => ({
-    id:r[0], no:r[1], name:r[2], rarity:r[3], cls:r[4],
+    id:r[0], no:r[1], name:r[2], rarity:r[3], cls:r[4], kr:r[5],
     face:`https://static.atlasacademy.io/JP/Faces/f_${r[0]}0.png`,
   }));
   svtById = new Map(svtAll.map(s => [s.id, s]));
@@ -433,7 +476,7 @@ function filteredSvt(){
   const q = document.getElementById('q1').value.trim().toLowerCase();
   const cs = cFilter.size ? classSet() : null;
   return svtAll.filter(s => {
-    if(s.rarity !== 5) return false;
+    if(!isGachaSvt(s)) return false;      // 배포(솔로몬)는 확챠 대상이 아니다
     if(cs && !cs.has(s.cls)) return false;
     if(q && !s.name.toLowerCase().includes(q) && String(s.no) !== q) return false;
     return true;
@@ -450,7 +493,7 @@ function renderSvt(){
 
 function svtCard(s){
   const np = own[s.id] || 0;
-  return `<div class="sc${np?' owned':''}" data-id="${s.id}"
+  return `<div class="sc${np?' owned':''}${inServer(s)?'':' off'}" data-id="${s.id}"
       onclick="cycNP(${s.id},1)" oncontextmenu="cycNP(${s.id},-1);return false">
     <span class="no">${s.no}</span>
     ${np ? `<span class="np${np>=5?' max':''}">${np}</span>` : ''}
@@ -483,8 +526,12 @@ function updFoot(){
   const n = Object.keys(own).length;
   const np5 = Object.values(own).filter(v => v >= 5).length;
   document.getElementById('fstat').innerHTML =
-    `보유 <b>${n}</b>기 · 보구5 <b>${np5}</b>기 · 제외 <b>${skip.size}</b>기` +
-    (bags.length ? ` · 복주머니 <b>${bags.length}</b>개` : ' · 확챠 미선택');
+    `<span class="srvsel">` +
+      `<b class="srv${srv==='KR'?' on':''}" onclick="setSrv('KR',true)">한국</b>` +
+      `<b class="srv${srv==='JP'?' on':''}" onclick="setSrv('JP',true)">일본</b>` +
+    `</span>` +
+    `${statText()} · 제외 <b>${skip.size}</b>기` +
+    (bags.length ? ` · 복주머니 <b>${bags.length}</b>개` : '');
 }
 
 /* ══════════ STEP 2 : 복주머니 표 ══════════ */
@@ -639,6 +686,21 @@ async function exportOwnPNG(){
   clone.style.cssText = `display:grid; gap:${GAP}px; width:${W}px;
     grid-template-columns:repeat(${COL}, ${CW}px);`;
   clone.querySelectorAll('.sc').forEach(c => { c.removeAttribute('onclick'); c.removeAttribute('oncontextmenu'); });
+
+  /* 마지막 줄 남은 칸을 합쳐 우측 아래에 숫자를 넣는다.
+     칸이 딱 떨어지면 span 이 한 줄 전체가 되어 새 줄이 생긴다 — 예외 처리가 필요 없다.
+     단, 검색·클래스 필터가 걸려 있으면 그림의 칸수와 분모가 어긋나므로 넣지 않는다. */
+  const filtered = cFilter.size > 0 || document.getElementById('q1').value.trim() !== '';
+  if(!filtered){
+    const rem  = cards.length % COL;
+    const span = rem ? COL - rem : COL;
+    const cell = document.createElement('div');
+    cell.style.cssText = `grid-column:span ${span}; display:flex; align-items:flex-end;
+      justify-content:flex-end; padding:0 3px 3px; line-height:1.35; text-align:right;
+      font-size:${span<=1?10:span<=2?11:13}px; font-weight:700; color:#1a1814;`;
+    cell.textContent = statText();
+    clone.appendChild(cell);
+  }
   box.appendChild(clone);
   // 아이콘은 104px 로도 충분히 또렷하다. 2배로 뽑으면 파일이 17MB 를 넘어 공유가 어렵다.
   await bakePNG(box, `보유서번트_${new Date().toISOString().slice(0,10)}.png`, 1);
@@ -760,7 +822,7 @@ const REC_TH = { s1: 0.75, gap: 0.08, card: 0.10, s1Lo: 0.55, gapHi: 0.12 };
    실측: 확인된 112기·61기 세트에서 이 문턱을 0.05 까지 낮춰도 가짜가 0건이었다.
    0.15 로 두면 에레쉬키갈(0.72 / 0.144)처럼 멀쩡한 카드가 턱걸이로 떨어진다. */
 const isSure = c => (c.s1>=REC_TH.s1 && c.gap>=REC_TH.gap) || (c.s1>=REC_TH.s1Lo && c.gap>=REC_TH.gapHi);
-const REC_VER = 'v12 2026-08-09';   // 인식 엔진 버전 (캐시 확인용)
+const REC_VER = 'v13 2026-08-10';   // 인식 엔진 버전 (캐시 확인용)
 
 async function loadRecModel(){
   if(REC) return REC;
@@ -796,7 +858,9 @@ async function loadRecModel(){
     for(let j=0;j<dd;j++) DX[i*dd+j]*=inv;
   }
   REC = { meta, M, ids: meta.ids, S: meta.S, box: meta.box, dim,
-          dg: { X: DX, Y: dg.y, n: dn, d: dd, box: dg.box, w: dg.w, h: dg.h } };
+          dg: { X: DX, Y: dg.y, n: dn, d: dd, box: dg.box, w: dg.w, h: dg.h },
+          lbl: dg.lbl ? { box:dg.lbl.box, w:dg.lbl.w, h:dg.lbl.h,
+                          kr:Float32Array.from(dg.lbl.kr), jp:Float32Array.from(dg.lbl.jp) } : null };
   return REC;
 }
 
@@ -1052,6 +1116,33 @@ function readRowNP(ctx, G, size, dx, y, ncol, tune){
   return out;
 }
 
+/* 카드 위쪽 '보구Lv. / 宝具Lv.' 글자를 읽어 어느 서버 캡쳐인지 본다.
+   숫자 정렬(dTune)이 이미 맞춰져 있으므로 같은 보정값을 그대로 쓰면 된다.
+   칸마다 한 표씩 던지고 다수결. 실측 28장에서 한국 캡쳐의 일본표 비율은 최대 0.39,
+   일본 캡쳐는 1.00 이라 0.70 을 넘으면 일본으로 본다 (한국 오탐 0건). */
+function readServer(ctx, G, size, dx, ys, tune){
+  const L = REC.lbl;
+  if(!L || !tune || tune.conf < 0.40) return null;
+  let jp=0, n=0;
+  for(const y of ys){
+    for(let c=0;c<G.ncol;c++){
+      const x  = G.x0 + dx + c*G.pitch;
+      const l  = (x + (L.box[0]*size|0) + tune.ox)|0;
+      const t  = (y + (L.box[1]*size|0) + tune.oy)|0;
+      const w  = (L.box[2]-L.box[0])*size*tune.sc|0;
+      const h  = (L.box[3]-L.box[1])*size*tune.sc|0;
+      if(w<8 || h<4) continue;
+      const v = normalize(boxDown(ctx, l, t, w, h, L.w, L.h, 1));
+      if(!v) continue;
+      let sk=0, sj=0;
+      for(let i=0;i<v.length;i++){ sk+=L.kr[i]*v[i]; sj+=L.jp[i]*v[i]; }
+      if(sj>sk) jp++;
+      n++;
+    }
+  }
+  return n ? {jp, n, ratio: jp/n} : null;
+}
+
 /* ── 한 장 처리 ── */
 /* 캔버스에서 픽셀을 읽는 건(getImageData) 한 번 한 번이 비싸다.
    격자를 맞추는 동안 이걸 수만 번 부르면 폰에서는 사실상 멈춘 것처럼 보인다.
@@ -1206,7 +1297,8 @@ function scanShot(cv, wide){
     }
   }
   fixNPSpikes(out);
-  return { ok:true, cells:out, cut, notSvt, grid:{...G,size,dx,y0}, dTune };
+  const lang = readServer(ctx, G, size, dx, tuneRows, dTune);
+  return { ok:true, cells:out, cut, notSvt, grid:{...G,size,dx,y0}, dTune, lang };
 }
 
 /* 영기일람은 보구Lv 순으로 정렬돼 있다(오름/내림 무관).
@@ -1273,7 +1365,7 @@ async function recognizeShots(files){
   const found = new Map();     // svtId -> {np, s1, gap}
   let cutRows = 0, notSvtTotal = 0;
   const weak  = [];
-  let bad=0;
+  let bad=0, jpByLabel=0;
   for(let i=0;i<files.length;i++){
     st.textContent = `캡쳐 ${i+1}/${files.length} 분석 중…`;
     await new Promise(r=>setTimeout(r,10));
@@ -1291,6 +1383,7 @@ async function recognizeShots(files){
     const okCnt = r.cells.filter(isSure).length;
     if(r.cells.length && okCnt < r.cells.length*0.5){ bad++; continue; }
     cutRows += r.cut||0; notSvtTotal += r.notSvt||0;
+    if(r.lang && r.lang.ratio >= 0.70) jpByLabel++;      // 글자로 본 일본 캡쳐
     /* 한 장 안에서 같은 서번트가 여러 칸에 나오면 '진짜로 여러 장 보유'다.
        보구는 합쳐진 장수이므로 보구를 더한다 (보1 + 보1 = 보2).
        캡쳐끼리는 겹쳐 찍힐 수 있으니 더하지 않는다. 대신 '가장 선명하게 읽힌 장'을 쓴다.
@@ -1314,11 +1407,22 @@ async function recognizeShots(files){
   const rescued = weak.filter(c => found.has(c.id)).length;
   const left    = weak.filter(c => !found.has(c.id));
 
+  /* 어느 서버 캡쳐인지 정한다. 근거는 두 가지고, 둘 다 한 방향으로만 확실하다.
+     ① 글자('宝具Lv.')가 일본  ② 한국 미출시 서번트가 나옴 — 한국서버엔 있을 수 없다.
+     반대 방향(일본→한국)은 자동으로 되돌리지 않는다. '한국 서번트만 나왔다'는 근거가 못 된다.
+     사용자가 직접 고른 뒤에는 건드리지 않는다. */
+  const jpBySvt = [...found.keys()].some(id => { const s=svtById.get(id); return s && s.rarity===5 && s.kr===0; });
+  let srvAuto = null;
+  if(!srvManual && srv !== 'JP' && (jpByLabel || jpBySvt)){ srvAuto = 'JP'; setSrv('JP', false); }
+
   let added=0, upd=0;
-  let lowRarity = 0, noNP = 0;
+  let lowRarity = 0, noNP = 0, welfare = 0;
   found.forEach((v,id) => {
     // 전 레어도로 대조해야 ★4가 엉뚱한 ★5로 붙는 걸 막는다. 다만 저장은 ★5만 한다.
-    if((svtById.get(id)||{}).rarity !== 5){ lowRarity++; return; }
+    const sv = svtById.get(id) || {};
+    if(sv.rarity !== 5){ lowRarity++; return; }
+    // 배포는 확챠에 안 나온다. own 에 넣으면 목록에 없어 지울 수도 없는 유령이 된다.
+    if(WELFARE_NO.has(sv.no)){ welfare++; return; }
     const pick = Math.min(5, v.sum);    // 보유 장수의 합, 보구5가 상한
     if(!pick){
       if(!own[id]){ own[id]=1; added++; noNP++; }
@@ -1335,13 +1439,15 @@ async function recognizeShots(files){
     notSvtTotal ? `  서번트가 아닌 카드 ${notSvtTotal}칸 제외 (Exp.UP 등)` : '',
     noNP ? `  보구레벨을 못 읽어 1로 둔 서번트 ${noNP}기 — 직접 확인해 주세요` : '',
     lowRarity ? `  (★4 이하 ${lowRarity}기는 복주머니 대상이 아니라 제외)` : '',
+    welfare ? `  배포 서번트 ${welfare}기 제외 (확챠에 나오지 않습니다)` : '',
+    srvAuto ? `  일본 서버 캡쳐로 판단했습니다 — 기준을 일본으로 바꿨습니다 (아래에서 직접 바꿀 수 있습니다)` : '',
     rescued ? `  애매했지만 다른 캡쳐로 확인된 칸 ${rescued}개` : '',
     left.length ? `  끝내 확인 못 한 칸 ${left.length}개 — 직접 눌러주세요` : '',
     `\n보구레벨 분포  ${[1,2,3,4,5].map(k=>k+':'+[...found.entries()].filter(([id,v])=>(svtById.get(id)||{}).rarity===5 && (v.np||1)===k).length).join('  ')}`,
     cutRows ? `\n너무 잘려서 건너뛴 줄 ${cutRows}개 — 그 줄이 온전히 나오게 한 장 더 찍어주세요` : '',
     bad ? `\n인식하지 못한 캡쳐 ${bad}장 (영기일람 화면 전체가 나오게 다시 찍어주세요)` : '',
   ].filter(Boolean).join('\n');
-  alert(msg);
+  alert(msg + '\n\n' + statText());
   toast(`${found.size}기 인식 완료`);
   }catch(e){
     alert('인식 중 문제가 생겼습니다.\n' + (e && e.message ? e.message : e));
