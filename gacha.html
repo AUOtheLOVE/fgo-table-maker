@@ -562,8 +562,7 @@ function renderBags(){
     return;
   }
   wrap.innerHTML = bags.map(b => {
-    // 공식 표기가 여성/남성이라 그대로 따른다 (예전엔 RED/WHITE)
-    const gl = b.grp === 'R' ? '여' : b.grp === 'W' ? '남' : '—';
+    const gl = b.grp === 'R' ? 'RED' : b.grp === 'W' ? 'WHITE' : '—';
     return `<div class="bag" data-bid="${b.bid}">
       <div class="bag-hd">
         <span class="grp ${b.grp}">${gl}</span>
