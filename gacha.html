@@ -692,13 +692,25 @@ async function exportOwnPNG(){
      단, 검색·클래스 필터가 걸려 있으면 그림의 칸수와 분모가 어긋나므로 넣지 않는다. */
   const filtered = cFilter.size > 0 || document.getElementById('q1').value.trim() !== '';
   if(!filtered){
-    const rem  = cards.length % COL;
-    const span = rem ? COL - rem : COL;
+    const rem = cards.length % COL;
+    // 남은 칸이 너무 좁으면 글자가 개미만 해진다. 3칸 이하면 아예 한 줄을 새로 쓴다.
+    let span = rem ? COL - rem : COL;
+    if(span < 4) span = COL;
+    const availW = span*CW + (span-1)*GAP - 8;
+    const txt = statText();
+    // 실제 글자 폭을 재서 칸에 꽉 차게 키운다 (칸 높이 104px 를 넘지 않게 상한)
+    const mc = document.createElement('canvas').getContext('2d');
+    let fs = 64;
+    for(; fs > 11; fs--){
+      mc.font = `700 ${fs}px system-ui, -apple-system, sans-serif`;
+      if(mc.measureText(txt).width <= availW) break;
+    }
+    fs = Math.min(fs, Math.round(CW * 0.42));
     const cell = document.createElement('div');
     cell.style.cssText = `grid-column:span ${span}; display:flex; align-items:flex-end;
-      justify-content:flex-end; padding:0 3px 3px; line-height:1.35; text-align:right;
-      font-size:${span<=1?10:span<=2?11:13}px; font-weight:700; color:#1a1814;`;
-    cell.textContent = statText();
+      justify-content:flex-end; padding:0 4px 4px; line-height:1.2; white-space:nowrap;
+      font-size:${fs}px; font-weight:700; color:#1a1814;`;
+    cell.textContent = txt;
     clone.appendChild(cell);
   }
   box.appendChild(clone);
