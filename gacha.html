@@ -705,7 +705,7 @@ async function exportOwnPNG(){
       mc.font = `700 ${fs}px system-ui, -apple-system, sans-serif`;
       if(mc.measureText(txt).width <= availW) break;
     }
-    fs = Math.min(fs, Math.round(CW * 0.42));
+    fs = Math.min(fs, Math.round(CW * 0.35));
     const cell = document.createElement('div');
     cell.style.cssText = `grid-column:span ${span}; display:flex; align-items:flex-end;
       justify-content:flex-end; padding:0 4px 4px; line-height:1.2; white-space:nowrap;
