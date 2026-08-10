@@ -990,6 +990,24 @@ function cardPresence(ctx,x,y,size,vish){
    (FGA가 OpenCV INTER_AREA 로 고정해 쓰는 것과 같은 이유) */
 function boxDown(ctx, l, t, w, h, OW, OH, ch){
   const src=ctx.getImageData(l,t,w,h).data, out=new Float32Array(OW*OH*ch);
+  /* 원본이 목표보다 작으면(줄어든 캡쳐의 숫자칸 등) 면적평균은 최근접이 되어 계단이 진다.
+     이때만 선형보간으로 늘린다. 실측: 카드 93px 짜리 캡쳐에서 보구 오독이 눈에 띄게 줄었다. */
+  if(w < OW || h < OH){
+    for(let oy=0;oy<OH;oy++){
+      const fy=OH>1 ? oy*(h-1)/(OH-1) : 0, y0=fy|0, y1=Math.min(h-1,y0+1), ty=fy-y0;
+      for(let ox=0;ox<OW;ox++){
+        const fx=OW>1 ? ox*(w-1)/(OW-1) : 0, x0=fx|0, x1=Math.min(w-1,x0+1), tx=fx-x0;
+        const o=(oy*OW+ox)*ch;
+        for(let k=0;k<(ch===3?3:3);k++){
+          const a=src[(y0*w+x0)*4+k], b=src[(y0*w+x1)*4+k],
+                c2=src[(y1*w+x0)*4+k], d=src[(y1*w+x1)*4+k];
+          const v=(a*(1-tx)+b*tx)*(1-ty) + (c2*(1-tx)+d*tx)*ty;
+          if(ch===3) out[o+k]=v; else out[o] = (out[o]||0) + v*(k===0?0.299:k===1?0.587:0.114);
+        }
+      }
+    }
+    return out;
+  }
   for(let oy=0;oy<OH;oy++){
     const y0=(oy*h/OH)|0, y1=Math.max(y0+1, ((oy+1)*h/OH)|0);
     for(let ox=0;ox<OW;ox++){
@@ -1074,12 +1092,17 @@ function npFromBand(band, l, t, r, b){
 /* 숫자상자 오프셋(ox,oy)·배율(sc)을 찾는다.
    한 행만 보고 맞추면 그 행이 상단 UI에 가렸을 때 통째로 어긋난다(실측 사례 있음).
    그래서 여러 행의 평균 확신도로 고른다. */
+/* 정렬 탐색 폭은 반드시 카드 크기에 비례해야 한다.
+   예전엔 ±14px 로 고정이라, 카톡 등으로 줄어든 캡쳐(카드 93px)에서는
+   숫자칸(7×10px)의 두 배 넘게 훑어 엉뚱한 글자에 붙었다.
+   실측: 전부 '보구5' 인 화면이 oy=-16 에 붙어 '1' 로 읽혔다. */
+const tuneR = size => Math.max(4, Math.round(size * 0.073));   // 카드 192px → ±14
 function tuneDigits(ctx, G, size, dx, ys, ncol){
-  const bx=REC.dg.box;
+  const bx=REC.dg.box, R=tuneR(size);
   const bands=ys.map(y => {
-    const bandY = y + (bx[1]*size|0) - 16;
-    const bandH = ((bx[3]-bx[1])*size*1.2|0) + 34;
-    return { y, band: grabBand(ctx, G.x0+dx-4, bandY, (ncol-1)*G.pitch + size + 12, bandH) };
+    const bandY = y + (bx[1]*size|0) - (R+2);
+    const bandH = ((bx[3]-bx[1])*size*1.2|0) + (R+2)*2 + 6;
+    return { y, band: grabBand(ctx, G.x0+dx-(R+2), bandY, (ncol-1)*G.pitch + size + (R+2)*2, bandH) };
   });
   // 행마다 따로 점수를 내고 '가장 잘 읽히는 행'을 기준으로 삼는다.
   // 상단 UI에 가린 행이 섞이면 평균이 끌려내려가 정렬이 통째로 어긋난다.
@@ -1099,8 +1122,8 @@ function tuneDigits(ctx, G, size, dx, ys, ncol){
   };
   let best={conf:-1, ox:0, oy:0, sc:1};
   for(const sc of [0.95,1.0,1.05,1.10])
-    for(let oy=-14;oy<=14;oy+=3)
-      for(let ox=-14;ox<=14;ox+=3){
+    for(let oy=-R;oy<=R;oy+=Math.max(1,R/5|0))
+      for(let ox=-R;ox<=R;ox+=Math.max(1,R/5|0)){
         const m=score(ox,oy,sc);
         if(m>best.conf) best={conf:m,ox,oy,sc};
       }
@@ -1114,10 +1137,10 @@ function tuneDigits(ctx, G, size, dx, ys, ncol){
 }
 /* 정해진 오프셋으로 한 행을 읽는다 */
 function readRowNP(ctx, G, size, dx, y, ncol, tune){
-  const bx=REC.dg.box;
-  const bandY = y + (bx[1]*size|0) - 16;
-  const bandH = ((bx[3]-bx[1])*size*1.2|0) + 34;
-  const band = grabBand(ctx, G.x0+dx-4, bandY, (ncol-1)*G.pitch + size + 12, bandH);
+  const bx=REC.dg.box, R=tuneR(size);
+  const bandY = y + (bx[1]*size|0) - (R+2);
+  const bandH = ((bx[3]-bx[1])*size*1.2|0) + (R+2)*2 + 6;
+  const band = grabBand(ctx, G.x0+dx-(R+2), bandY, (ncol-1)*G.pitch + size + (R+2)*2, bandH);
   const w=(bx[2]-bx[0])*size*tune.sc, h=(bx[3]-bx[1])*size*tune.sc;
   const out=[];
   for(let c=0;c<ncol;c++){
@@ -1175,10 +1198,44 @@ function cachePixels(cv){
   }};
 }
 
-function scanShot(cv, wide){
+/* 카톡·메신저를 거치면서 줄어든 캡쳐는 카드가 100px 도 안 된다.
+   그러면 보구 숫자칸이 7×10px 밖에 안 남아 정렬이 조금만 어긋나도 통째로 오독한다.
+   실측: 전부 '보구5' 인 화면이 전부 '1' 로 읽혔다. 키워서 읽으면 32칸 전부 맞는다. */
+function upscale(cv, f){
+  const W=cv.width, H=cv.height, w2=Math.round(W*f), h2=Math.round(H*f);
+  const src=cv.getContext('2d',{willReadFrequently:true}).getImageData(0,0,W,H).data;
+  const dst=new Uint8ClampedArray(w2*h2*4);
+  for(let y=0;y<h2;y++){
+    const fy=Math.max(0,(y+0.5)/f-0.5), y0=Math.min(H-1,fy|0), y1=Math.min(H-1,y0+1), ty=fy-y0;
+    for(let x=0;x<w2;x++){
+      const fx=Math.max(0,(x+0.5)/f-0.5), x0=Math.min(W-1,fx|0), x1=Math.min(W-1,x0+1), tx=fx-x0;
+      const o=(y*w2+x)*4;
+      for(let k=0;k<3;k++){
+        const a=src[(y0*W+x0)*4+k], b=src[(y0*W+x1)*4+k],
+              c=src[(y1*W+x0)*4+k], d=src[(y1*W+x1)*4+k];
+        dst[o+k]=(a*(1-tx)+b*tx)*(1-ty) + (c*(1-tx)+d*tx)*ty;
+      }
+      dst[o+3]=255;
+    }
+  }
+  return { width:w2, height:h2, getContext(){ return { getImageData(x,y,w,h){
+    x|=0;y|=0;w|=0;h|=0; const out=new Uint8ClampedArray(w*h*4);
+    for(let r=0;r<h;r++){ const sy=y+r; if(sy<0||sy>=h2) continue;
+      for(let c=0;c<w;c++){ const sx=x+c; if(sx<0||sx>=w2) continue;
+        const si=(sy*w2+sx)*4, di=(r*w+c)*4;
+        out[di]=dst[si];out[di+1]=dst[si+1];out[di+2]=dst[si+2];out[di+3]=dst[si+3]; } }
+    return {data:out,width:w,height:h}; } }; } };
+}
+
+function scanShot(cv, wide, upped){
+  const G0=detectGrid(cv);
+  if(!G0) return { ok:false, reason:'격자를 찾지 못했습니다' };
+  if(!upped && G0.cw < 150){
+    const f = Math.min(3, Math.max(2, Math.round(250/G0.cw)));
+    if(cv.width*f * cv.height*f <= 30e6) return scanShot(upscale(cv,f), wide, true);
+  }
   const ctx=cachePixels(cv);
-  const G=detectGrid(cv);
-  if(!G) return { ok:false, reason:'격자를 찾지 못했습니다' };
+  const G=G0;
   const H=G.H, S=REC.S, box=REC.box;
   // 1단계 — 행 위상만 거칠게 잡는다 (여기서는 표본추출을 써도 무방)
   const rowScore=(size,dx,yy,maxRows)=>{
@@ -1287,8 +1344,10 @@ function scanShot(cv, wide){
     if(vish >= size*0.20 && dTune.conf >= 0.40){
       let bestM=-1;
       // 세로만 맞추면 오른쪽 열로 갈수록 가로가 밀린다(실측: 오독 20건 중 13건이 우측 열).
-      for(let dxo=-2; dxo<=2; dxo++)
-      for(let d=-5; d<=5; d++){
+      const RX = Math.max(1, Math.round(size*0.011));   // 카드 192px → ±2
+      const RY = Math.max(2, Math.round(size*0.026));   // 카드 192px → ±5
+      for(let dxo=-RX; dxo<=RX; dxo++)
+      for(let d=-RY; d<=RY; d++){
         const r = readRowNP(ctx, G, size, dx, y, G.ncol, {...dTune, ox:dTune.ox+dxo, oy:dTune.oy+d});
         const m = r.reduce((a,z)=>a+z.conf,0)/r.length;
         if(m>bestM){ bestM=m; npCells=r; }
