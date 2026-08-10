@@ -751,15 +751,14 @@ async function exportPNG(){
 }
 
 
-/* 아이폰 Safari 는 링크의 download 속성을 무시한다. 눌러도 아무 일이 없거나
-   사진앱이 아닌 엉뚱한 곳으로 가서 "받았는데 안 보인다"가 된다.
-   그래서 공유시트(사진에 저장)를 먼저 쓰고, 안 되면 이미지를 띄워
-   길게 눌러 저장하게 한다. 안드로이드·PC 는 기존대로 바로 내려받는다. */
+/* 저장 경로는 아이폰만 다르다.
+   아이폰 Safari 는 링크의 download 속성을 무시해서, 눌러도 아무 일이 없거나
+   사진앱이 아닌 엉뚱한 곳으로 가 "받았는데 안 보인다"가 된다. 그래서 공유시트를 쓴다.
+   반대로 안드로이드·PC 는 공유시트를 띄우면 정작 저장이 막힌다.
+   (실측: 갤럭시는 공유창에 그림만 뜨고 저장이 안 됨, 윈도우도 마찬가지)
+   둘은 그냥 내려받으면 다운로드함에 잘 들어간다. */
 const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent)
   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-/* 윈도우·맥에서도 공유가 되긴 하지만, 공유창이 뜨면 정작 다운로드가 막힌다.
-   PC 는 그냥 내려받는 게 맞다. 공유시트는 폰에서만 쓴다. */
-const isMobile = isIOS || /Android/.test(navigator.userAgent);
 
 function download(blob, name, w, h){
   const url = URL.createObjectURL(blob);
@@ -771,7 +770,7 @@ function download(blob, name, w, h){
 }
 
 async function savePNG(blob, name, w, h){
-  if(!isMobile) return download(blob, name, w, h);   // PC 는 바로 내려받기
+  if(!isIOS) return download(blob, name, w, h);   // 안드로이드·PC 는 바로 내려받기
   const file = new File([blob], name, {type:'image/png'});
   if(navigator.canShare && navigator.canShare({files:[file]})){
     try{
@@ -783,8 +782,7 @@ async function savePNG(blob, name, w, h){
       // 화면을 그리는 데 시간이 걸려 '누른 직후'가 아니게 되면 막힌다 → 아래로 넘어간다
     }
   }
-  if(!isIOS) return download(blob, name, w, h);      // 안드로이드는 다운로드함에 들어간다
-  showSaveSheet(blob, name, file);                   // 아이폰만 길게 눌러 저장
+  showSaveSheet(blob, name, file);   // 공유시트가 막히면 길게 눌러 사진에 추가
 }
 
 /* 아이폰 대비책 — 만든 이미지를 그대로 띄운다. 길게 눌러 '사진에 추가'가 확실하다. */
