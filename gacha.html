@@ -769,6 +769,10 @@ async function exportPNG(){
    둘은 그냥 내려받으면 다운로드함에 잘 들어간다. */
 const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent)
   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+/* 카톡·인스타 등 앱 안에서 열린 브라우저는 파일 내려받기가 막혀 있는 경우가 많다.
+   눌러도 아무 일이 없거나 공유창만 뜨고 저장이 안 된다. 이때는 이미지를 띄워 길게 누르게 한다. */
+const isInApp = /KAKAOTALK|FB_IAB|FBAN|FBAV|Instagram|Line\/|NAVER\(inapp|DaumApps|everytimeApp|Twitter|Snapchat/i
+  .test(navigator.userAgent);
 
 function download(blob, name, w, h){
   const url = URL.createObjectURL(blob);
@@ -780,8 +784,9 @@ function download(blob, name, w, h){
 }
 
 async function savePNG(blob, name, w, h){
-  if(!isIOS) return download(blob, name, w, h);   // 안드로이드·PC 는 바로 내려받기
   const file = new File([blob], name, {type:'image/png'});
+  if(isInApp) return showSaveSheet(blob, name, file);   // 앱 안 브라우저는 내려받기가 막힌다
+  if(!isIOS)  return download(blob, name, w, h);        // 안드로이드·PC 는 바로 내려받기
   if(navigator.canShare && navigator.canShare({files:[file]})){
     try{
       await navigator.share({files:[file], title:name});
@@ -795,7 +800,7 @@ async function savePNG(blob, name, w, h){
   showSaveSheet(blob, name, file);   // 공유시트가 막히면 길게 눌러 사진에 추가
 }
 
-/* 아이폰 대비책 — 만든 이미지를 그대로 띄운다. 길게 눌러 '사진에 추가'가 확실하다. */
+/* 마지막 수단 — 만든 이미지를 그대로 띄운다. 길게 눌러 저장하는 건 어디서나 된다. */
 function showSaveSheet(blob, name, file){
   const url = URL.createObjectURL(blob);
   const ov = document.createElement('div');
@@ -804,7 +809,8 @@ function showSaveSheet(blob, name, file){
     gap:12px; padding:16px; box-sizing:border-box;`;
   ov.innerHTML = `
     <div style="color:#fff;font-size:15px;line-height:1.5;text-align:center">
-      이미지를 <b>길게 눌러</b> ‘사진에 추가’를 선택하세요
+      이미지를 <b>길게 눌러</b> ‘이미지 저장’(아이폰은 ‘사진에 추가’)을 누르세요<br>
+      <span style="font-size:12px;opacity:.75">앱 안에서 열면 저장이 막힐 수 있습니다 — 브라우저로 열면 바로 받아집니다</span>
     </div>
     <img src="${url}" alt="확챠표"
          style="max-width:100%;max-height:66vh;border-radius:8px;background:#f7f5f0">
