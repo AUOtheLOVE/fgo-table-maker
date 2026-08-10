@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>2026년 8월 복주머니</title>
+<title>2026 여름 축제 기념 복주머니</title>
 <meta name="description" content="복주머니 확챠 플래너. 보유 서번트와 보구레벨을 체크하면 각 복주머니의 신규 획득률을 계산해 어디를 돌릴지 알려줍니다."/>
 <meta property="og:type" content="website"/>
 <meta property="og:site_name" content="한그오 확챠 플래너"/>
-<meta property="og:title" content="2026년 8월 복주머니"/>
+<meta property="og:title" content="2026 여름 축제 기념 복주머니"/>
 <meta property="og:description" content="보유 체크 → 복주머니별 신규 획득률 자동 계산."/>
 <meta property="og:url" content="https://auothelove.github.io/fgo-table-maker/gacha.html"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -229,7 +229,7 @@ body.skipmode .fc:hover{box-shadow:inset 0 0 0 3px var(--skp)}
 <body>
 
 <div class="topbar">
-  <h1>2026년 8월 <span>복주머니</span></h1>
+  <h1>2026 여름 축제 기념 <span>복주머니</span></h1>
   <select class="sel wide" id="evtSel" onchange="changeEvent()">
     <option value="">확챠 불러오는 중…</option>
   </select>
@@ -562,7 +562,8 @@ function renderBags(){
     return;
   }
   wrap.innerHTML = bags.map(b => {
-    const gl = b.grp === 'R' ? 'RED' : b.grp === 'W' ? 'WHITE' : '—';
+    // 공식 표기가 여성/남성이라 그대로 따른다 (예전엔 RED/WHITE)
+    const gl = b.grp === 'R' ? '여' : b.grp === 'W' ? '남' : '—';
     return `<div class="bag" data-bid="${b.bid}">
       <div class="bag-hd">
         <span class="grp ${b.grp}">${gl}</span>
