@@ -822,9 +822,12 @@ async function exportPNG(){
   box.className='pngbox';
   box.style.cssText = `position:fixed; left:-99999px; top:0; width:${W+28}px;
     padding:14px; background:#f7f5f0; box-sizing:border-box;`;
+  // 고민 목록은 제목 없이 백만 굽는다
   const ttl = document.createElement('div');
-  ttl.style.cssText = 'font-size:15px;font-weight:700;color:#1a1814;margin:2px 2px 11px';
-  ttl.textContent = (evtLabel || '복주머니') + (step === 3 ? ' — 고민 목록' : '');
+  if(step !== 3){
+    ttl.style.cssText = 'font-size:15px;font-weight:700;color:#1a1814;margin:2px 2px 11px';
+    ttl.textContent = evtLabel || '복주머니';
+  }
   const clone = wrap.cloneNode(true);
   clone.removeAttribute('id');
   clone.style.cssText = getComputedStyle(wrap).cssText || '';
