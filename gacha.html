@@ -143,8 +143,9 @@ a.navlink{text-decoration:none}
   display:flex;align-items:center;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bag-body{display:flex;flex-wrap:wrap;gap:4px;padding:7px 8px}
-/* 고민 중인 백 — 머리를 눌러 켠다 */
-.bag-hd{cursor:pointer}
+/* 고민 중인 백 — 카드 아무 데나 눌러 켠다 (서번트 칸 제외) */
+#bagWrap .bag{cursor:pointer}
+#bagWrap .bag .fc{cursor:default}
 .bag.pick{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc)}
 .bag.pick .bag-hd{background:var(--acc);}
 .bag.pick .bag-nm{color:#fff}
@@ -688,8 +689,8 @@ const bagKey = b => b.grp + '|' + b.name;
 function bagHTML(b, withPick){
   const gl = b.grp === 'R' ? 'RED' : b.grp === 'W' ? 'WHITE' : '—';
   const on = pick.has(bagKey(b));
-  return `<div class="bag${on?' pick':''}" data-bid="${b.bid}">
-    <div class="bag-hd"${withPick?` onclick="tglPick(${b.bid})"`:''}>
+  return `<div class="bag${on?' pick':''}" data-bid="${b.bid}"${withPick?` onclick="tglPick(${b.bid},event)"`:''}>
+    <div class="bag-hd">
       <span class="grp ${b.grp}">${gl}</span>
       <span class="bag-nm">${esc(b.name)}</span>
     </div>
@@ -718,7 +719,9 @@ function renderBags(){
 /* 고민 목록은 백 '이름'으로 기억한다. 확챠를 다시 불러오면 bid 가 새로 매겨지기 때문이다. */
 function pickList(){ return bags.filter(b => pick.has(bagKey(b))); }
 
-function tglPick(bid){
+function tglPick(bid, ev){
+  // 서번트 칸을 누른 건 '제외' 조작이라 백 담기로 새지 않게 막는다
+  if(ev && ev.target && ev.target.closest && ev.target.closest('.fc')) return;
   const b = bags.find(x => x.bid === bid);
   if(!b) return;
   const k = bagKey(b);
