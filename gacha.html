@@ -160,13 +160,14 @@ a.navlink{text-decoration:none}
 .ksec>h3{font-size:15px;font-weight:800;margin:0 0 7px;padding:5px 10px;
   background:var(--s2);border:1px solid var(--line);border-radius:7px}
 /* 한 가챠 = 박스 하나. 한 줄에 여러 개 깔아 스크롤을 줄인다 (확챠표와 같은 방식) */
-.kgrid{display:grid;gap:7px;grid-template-columns:repeat(auto-fill,minmax(198px,1fr))}
+.kgrid{display:grid;gap:7px;grid-template-columns:repeat(auto-fill,minmax(238px,1fr))}
 .kcard{display:flex;align-items:flex-end;gap:5px;flex-wrap:wrap;
   background:var(--s1);border:1px solid var(--line);border-radius:8px;padding:6px 7px}
 .kgrp{display:flex;flex-direction:column;align-items:center;gap:2px}
 .kgrp>.row{display:flex;gap:4px}
 .kgrp>.cap{font-size:10px;color:var(--t3);font-weight:700;line-height:1}
 .kgrp.re>.cap{color:var(--acc)}
+.kgrp.re.al>.cap{color:var(--wht)}
 .kgrp.re{padding-left:5px;border-left:1px dashed var(--line)}
 .fc.kf{width:66px;height:66px;flex:0 0 66px;border-radius:7px}
 .fc.kf.sm{width:52px;height:52px;flex:0 0 52px}
@@ -610,8 +611,8 @@ function updFoot(){
 
 /* ══════════ 참고 : JP 관위대관전 ══════════
    한국에 아직 안 들어온 일본 이벤트라 '참고'다. 확챠 플래너 흐름(1→2→3)에는 안 섞는다.
-   기본은 12월 '전 서번트 픽업(올캐러)' 구성 — 184기로 가장 완전하고 ★4 도 대부분 1기씩이다.
-   그 전 관위대관전에서 ★4 짝이 달랐던 45기만 '관위전' 으로 옆에 덧붙인다. */
+   시간순은 관위전 1차 → 관위전 2차(복각) → 올캐러(12월 전 서번트 픽업)다.
+   기본은 가장 이른 관위전 1차. 뒤 회차에서 ★4 짝이 바뀐 것만 '복각'·'올캐러' 로 덧붙인다. */
 async function loadKanui(){
   if(kanui){ renderKanui(); return; }
   const wrap = document.getElementById('kanWrap');
@@ -647,8 +648,10 @@ function renderKanui(){
       <div class="kgrid">${o.r.map(r => `<div class="kcard">
         ${kanFace(r.a)}
         <span class="kgrp"><span class="row">${r.b.map(i=>kanFace(i,true)).join('')}</span></span>
-        ${r.k ? `<span class="kgrp re"><span class="cap">관위전</span>
+        ${r.k ? `<span class="kgrp re"><span class="cap">복각</span>
                  <span class="row">${r.k.map(i=>kanFace(i,true)).join('')}</span></span>` : ''}
+        ${r.z ? `<span class="kgrp re al"><span class="cap">올캐러</span>
+                 <span class="row">${r.z.map(i=>kanFace(i,true)).join('')}</span></span>` : ''}
       </div>`).join('')}</div>
     </div>`).join('');
 }
