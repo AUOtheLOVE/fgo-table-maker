@@ -158,14 +158,15 @@ a.navlink{text-decoration:none}
   border-radius:6px;background:var(--s1);color:var(--t2);cursor:pointer}
 .kbtn:hover{border-color:var(--acc);color:var(--acc)}
 .ksec{margin:0 0 16px;scroll-margin-top:64px}
-.ksec>h3{font-size:15px;font-weight:800;margin:0 0 7px;padding:5px 10px;
+/* 제목을 격자 안에 넣고 열 전체를 잇게 한다 — 카드가 쓰는 폭에만 맞춰진다 */
+.kgrid>h3{grid-column:1/-1;font-size:15px;font-weight:800;margin:0;padding:5px 10px;
   background:var(--s2);border:1px solid var(--line);border-radius:7px}
 /* 한 가챠 = 박스 하나. 한 줄에 여러 개 깔아 스크롤을 줄인다 (확챠표와 같은 방식) */
 /* 칸 크기를 고정한다. 한 카드 최대 4칸(★5+★4 셋)에 맞춰 두고,
    서번트가 적은 백은 오른쪽이 비게 둔다 — 폭이 제각각이면 오히려 읽기 어렵다 */
 /* 폭을 늘리지 않는다(1fr 금지). 4칸이 딱 들어가는 크기로 고정하고 남는 건 줄 끝에 둔다 */
 .kgrid{display:grid;gap:7px;justify-content:start;
-  grid-template-columns:repeat(auto-fill,272px)}
+  grid-template-columns:repeat(auto-fit,272px)}
 /* 한 줄로 고정 — 줄바꿈되면 카드 높이가 들쭉날쭉해진다 */
 .kcard{display:flex;align-items:flex-end;gap:5px;flex-wrap:nowrap;
   background:var(--s1);border:1px solid var(--line);border-radius:8px;padding:6px 7px}
@@ -186,7 +187,7 @@ a.navlink{text-decoration:none}
 .fc.kf.sm .np{font-size:19px}
 .fc.kf.own{box-shadow:0 0 0 2px #cf6a72}
 @media(max-width:640px){
-  .kgrid{grid-template-columns:repeat(auto-fill,228px)}
+  .kgrid{grid-template-columns:repeat(auto-fit,228px)}
   .fc.kf{width:54px;height:54px;flex:0 0 54px}
   .fc.kf.sm{width:44px;height:44px;flex:0 0 44px}
   .fc.kf .np{font-size:21px} .fc.kf.sm .np{font-size:16px}
@@ -654,8 +655,8 @@ function renderKanui(){
   ).join('');
   wrap.innerHTML = kanui.g.map(o => `
     <div class="ksec" id="k_${o.c}">
-      <h3>${esc(o.l)}</h3>
-      <div class="kgrid">${o.r.map(r => `<div class="kcard">
+      <div class="kgrid">
+        <h3>${esc(o.l)}</h3>${o.r.map(r => `<div class="kcard">
         <span class="kmain">${kanFace(r.a)}${r.b.map(i=>kanFace(i,true)).join('')}</span>
         ${(r.k||r.z) ? `<span class="kalt">
           ${r.k ? `<span class="kgrp re"><span class="cap">복각</span>
