@@ -162,11 +162,9 @@ a.navlink{text-decoration:none}
 .kgrid>h3{grid-column:1/-1;font-size:15px;font-weight:800;margin:0;padding:5px 10px;
   background:var(--s2);border:1px solid var(--line);border-radius:7px}
 /* 한 가챠 = 박스 하나. 한 줄에 여러 개 깔아 스크롤을 줄인다 (확챠표와 같은 방식) */
-/* 칸 크기를 고정한다. 한 카드 최대 4칸(★5+★4 셋)에 맞춰 두고,
-   서번트가 적은 백은 오른쪽이 비게 둔다 — 폭이 제각각이면 오히려 읽기 어렵다 */
-/* 폭을 늘리지 않는다(1fr 금지). 4칸이 딱 들어가는 크기로 고정하고 남는 건 줄 끝에 둔다 */
-.kgrid{display:grid;gap:7px;justify-content:start;
-  grid-template-columns:repeat(auto-fit,272px)}
+/* 화면 폭을 채우게 늘린다. 서번트가 적은 백은 카드 안 오른쪽이 비지만 그게 낫다.
+   칸 폭을 고정하면 넓은 화면에서 오른쪽이 통째로 남는다 */
+.kgrid{display:grid;gap:7px;grid-template-columns:repeat(auto-fit,minmax(272px,1fr))}
 /* 한 줄로 고정 — 줄바꿈되면 카드 높이가 들쭉날쭉해진다 */
 .kcard{display:flex;align-items:flex-end;gap:5px;flex-wrap:nowrap;
   background:var(--s1);border:1px solid var(--line);border-radius:8px;padding:6px 7px}
@@ -186,11 +184,17 @@ a.navlink{text-decoration:none}
   border-radius:7px;padding:0;text-shadow:0 1px 3px rgba(0,0,0,.5)}
 .fc.kf.sm .np{font-size:19px}
 .fc.kf.own{box-shadow:0 0 0 2px #cf6a72}
+/* 폰은 2열. 한 줄에 다 못 넣으니 카드 안에서 두 줄로 접고 높이를 맞춘다 */
 @media(max-width:640px){
-  .kgrid{grid-template-columns:repeat(auto-fit,228px)}
-  .fc.kf{width:54px;height:54px;flex:0 0 54px}
-  .fc.kf.sm{width:44px;height:44px;flex:0 0 44px}
-  .fc.kf .np{font-size:21px} .fc.kf.sm .np{font-size:16px}
+  .kgrid{grid-template-columns:1fr 1fr;gap:5px}
+  .kcard{flex-wrap:wrap;padding:5px;gap:4px;min-height:104px;justify-content:flex-start}
+  .kmain,.kalt{flex-wrap:wrap;gap:4px}
+  .kalt{gap:6px}
+  .fc.kf{width:44px;height:44px;flex:0 0 44px;border-radius:6px}
+  .fc.kf.sm{width:34px;height:34px;flex:0 0 34px}
+  .fc.kf .np{font-size:18px;border-radius:6px} .fc.kf.sm .np{font-size:13px}
+  .kgrp>.cap{font-size:9px}
+  .kgrp.re{padding-left:4px}
 }
 
 .fc{position:relative;width:86px;height:86px;flex:0 0 86px;user-select:none;cursor:default;
