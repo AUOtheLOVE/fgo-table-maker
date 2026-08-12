@@ -149,6 +149,39 @@ a.navlink{text-decoration:none}
 .bag.pick .bag-hd{background:var(--acc);}
 .bag.pick .bag-nm{color:#fff}
 /* 담긴 표시는 색으로만 — 체크박스는 두지 않는다 */
+/* 참고 탭은 흐름(1→2→3)에 안 섞이게 번호 없이 회색 */
+.step.ref{color:var(--t3)}
+.step.ref.active{color:var(--acc)}
+#kanNav{flex-wrap:wrap;gap:6px}
+.kbtn{padding:4px 11px;font-size:13px;font-weight:700;border:1px solid var(--line);
+  border-radius:6px;background:var(--s1);color:var(--t2);cursor:pointer}
+.kbtn:hover{border-color:var(--acc);color:var(--acc)}
+.ksec{margin:0 0 16px;scroll-margin-top:64px}
+.ksec>h3{font-size:15px;font-weight:800;margin:0 0 7px;padding:5px 10px;
+  background:var(--s2);border:1px solid var(--line);border-radius:7px}
+.ksec>h3 span{font-weight:600;color:var(--t3);font-size:12px;margin-left:6px}
+.krow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:6px 8px;border-bottom:1px solid var(--line)}
+.krow:last-child{border-bottom:0}
+.kfive{display:flex;gap:4px}
+.karrow{color:var(--t3);font-size:15px}
+.kfour{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
+.kgrp{display:flex;flex-direction:column;align-items:center;gap:2px}
+.kgrp>.row{display:flex;gap:4px}
+.kgrp>.cap{font-size:10px;color:var(--t3);font-weight:700}
+.kgrp.re>.cap{color:var(--acc)}
+.fc.kf{width:66px;height:66px;flex:0 0 66px;border-radius:7px}
+.fc.kf.sm{width:52px;height:52px;flex:0 0 52px}
+.fc.kf .np{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:rgba(196,60,66,.42);color:#fff;font-size:26px;font-weight:900;
+  border-radius:7px;padding:0;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+.fc.kf.sm .np{font-size:19px}
+.fc.kf.own{box-shadow:0 0 0 2px #cf6a72}
+@media(max-width:640px){
+  .fc.kf{width:54px;height:54px;flex:0 0 54px}
+  .fc.kf.sm{width:44px;height:44px;flex:0 0 44px}
+  .fc.kf .np{font-size:21px} .fc.kf.sm .np{font-size:16px}
+}
 
 .fc{position:relative;width:86px;height:86px;flex:0 0 86px;user-select:none;cursor:default;
   border-radius:6px;overflow:hidden}
@@ -254,6 +287,7 @@ body.skipmode .fc:hover{box-shadow:inset 0 0 0 3px var(--skp)}
   <button class="step active" id="stp1" onclick="goStep(1)"><span class="num">1</span>보유 서번트</button>
   <button class="step" id="stp2" onclick="goStep(2)"><span class="num">2</span>확챠 표</button>
   <button class="step" id="stp3" onclick="goStep(3)"><span class="num">3</span>어디를 돌릴까</button>
+  <button class="step ref" id="stp4" onclick="goStep(4)">(참고) JP 관위전</button>
 </div>
 
 <!-- ══ STEP 1 ══ -->
@@ -313,6 +347,16 @@ body.skipmode .fc:hover{box-shadow:inset 0 0 0 3px var(--skp)}
   <div id="pickWrap"></div>
 </div>
 
+<!-- ══ 참고 : JP 관위대관전 ══ -->
+<div class="view hide" id="v4">
+  <div class="bar" id="kanNav" style="position:sticky;top:0;z-index:20"></div>
+  <div style="font-size:11px;color:var(--t3);margin:0 2px 8px">
+    일본 서버 「관위대관전」 픽업 구성입니다. 한국에는 아직 안 들어왔습니다. ★5·★4만 보여줍니다.
+    붉은 막과 숫자는 1단계에서 체크한 보유 ★5 입니다.
+  </div>
+  <div id="kanWrap"></div>
+</div>
+
 <div class="foot" id="foot">
   <span class="stat" id="fstat">—</span>
   <div class="spacer"></div>
@@ -344,6 +388,7 @@ let svtById  = new Map();
 let gachaAll = [];              // 복주머니 원본
 let events   = [];              // [{key,label,gachas:[]}]
 let bags     = [];              // [{bid,name,grp:'R'|'W'|'N',ids:[]}]
+let kanui    = null;            // (참고) JP 관위대관전 — 처음 열 때 한 번만 받는다
 let pick     = new Set();       // 고민 중인 백. bid 는 새로 그릴 때마다 바뀌므로 '그룹|이름' 으로 기억한다.
                                 // 이름만 쓰면 안 된다 — 여성/남성에 '삼기사 · 버스터보구 ①' 처럼 같은 이름이 있다.
 let evtLabel = '';
@@ -566,10 +611,58 @@ function updFoot(){
     (bags.length ? ` · 복주머니 <b>${bags.length}</b>개` : '');
 }
 
+/* ══════════ 참고 : JP 관위대관전 ══════════
+   한국에 아직 안 들어온 일본 이벤트라 '참고'다. 확챠 플래너 흐름(1→2→3)에는 안 섞는다.
+   한 줄 = ★5 하나 + 그 픽업에 같이 있던 ★4.
+   두 번 열린 클래스는 ★4 짝이 바뀐 경우가 있어 '복각시' 로 따로 묶는다. */
+async function loadKanui(){
+  if(kanui){ renderKanui(); return; }
+  const wrap = document.getElementById('kanWrap');
+  wrap.innerHTML = `<div class="empty"><span class="spin"></span> 관위전 자료를 받는 중…</div>`;
+  try{
+    kanui = await fetchJSON('data/kanui.json');
+    renderKanui();
+  }catch(e){
+    wrap.innerHTML = `<div class="empty"><b>자료를 받지 못했습니다</b>잠시 뒤 다시 열어주세요.</div>`;
+  }
+}
+
+function kanFace(id, small){
+  const s = svtById.get(id);
+  if(!s) return '';
+  const np = own[id] || 0;                       // 보유 표시는 ★5 만 (1단계가 ★5 만 다룬다)
+  const cls = 'fc kf' + (small ? ' sm' : '') + (np ? ' own' : '');
+  return `<div class="${cls}" title="${esc(s.name)}">
+    <img src="${s.face}" loading="lazy" crossorigin="anonymous" alt=""/>
+    ${np ? `<span class="np${np>=5?' max':''}">${np}</span>` : ''}
+  </div>`;
+}
+
+function renderKanui(){
+  const nav = document.getElementById('kanNav');
+  const wrap = document.getElementById('kanWrap');
+  nav.innerHTML = kanui.g.map(o =>
+    `<button class="kbtn" onclick="document.getElementById('k_${o.c}').scrollIntoView({behavior:'smooth'})">${esc(o.l)}</button>`
+  ).join('');
+  wrap.innerHTML = kanui.g.map(o => `
+    <div class="ksec" id="k_${o.c}">
+      <h3>${esc(o.l)}<span>${esc(o.d)} · ★5 ${o.r.length}기${o.n>1?' · 2회 개최':''}</span></h3>
+      ${o.r.map(r => `<div class="krow">
+        <span class="kfive">${kanFace(r.a)}</span>
+        <span class="karrow">→</span>
+        <span class="kfour">
+          <span class="kgrp"><span class="row">${r.b.map(i=>kanFace(i,true)).join('')}</span></span>
+          ${r.r ? `<span class="kgrp re"><span class="cap">복각시</span>
+                   <span class="row">${r.r.map(i=>kanFace(i,true)).join('')}</span></span>` : ''}
+        </span>
+      </div>`).join('')}
+    </div>`).join('');
+}
+
 /* ══════════ STEP 2 : 복주머니 표 ══════════ */
 function goStep(n){
   step = n;
-  for(const k of [1,2,3]){
+  for(const k of [1,2,3,4]){
     document.getElementById('stp'+k).classList.toggle('active', n===k);
     document.getElementById('v'+k).classList.toggle('hide', n!==k);
   }
@@ -577,9 +670,11 @@ function goStep(n){
   document.getElementById('foot2').style.display = n===2 ? '' : 'none';
   const bp = document.getElementById('btnPng');
   if(bp) bp.title = n===1 ? '보유 체크한 그대로 이미지로 저장'
-                  : n===2 ? '확챠표를 이미지로 저장' : '고민 중인 복주머니를 이미지로 저장';
+                  : n===2 ? '확챠표를 이미지로 저장'
+                  : n===3 ? '고민 중인 복주머니를 이미지로 저장' : '참고 자료 — 저장 없음';
   if(n===2) renderBags();
   if(n===3){ renderPick(); applyCols(); }
+  if(n===4) loadKanui();
 }
 
 function applyCols(){
@@ -803,6 +898,7 @@ async function exportOwnPNG(){
 }
 
 async function exportPNG(){
+  if(step === 4){ toast('참고 자료라 저장은 없습니다'); return; }
   if(step === 1) return exportOwnPNG();
   if(step === 3 && !pickList().length){ toast('고민 목록이 비어 있습니다'); return; }
   if(!bags.length){ toast('내보낼 표가 없습니다'); return; }
