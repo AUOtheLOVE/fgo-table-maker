@@ -161,9 +161,9 @@ a.navlink{text-decoration:none}
 .ksec>h3{font-size:15px;font-weight:800;margin:0 0 7px;padding:5px 10px;
   background:var(--s2);border:1px solid var(--line);border-radius:7px}
 /* 한 가챠 = 박스 하나. 한 줄에 여러 개 깔아 스크롤을 줄인다 (확챠표와 같은 방식) */
-/* 격자 대신 흘려 담는다 — 칸을 고정하면 서번트가 적은 백에 빈 자리가 남는다 */
-.kgrid{display:flex;flex-wrap:wrap;gap:7px;align-items:stretch}
-.kgrid>.kcard{flex:0 0 auto}
+/* 칸 크기를 고정한다. 한 카드 최대 4칸(★5+★4 셋)에 맞춰 두고,
+   서번트가 적은 백은 오른쪽이 비게 둔다 — 폭이 제각각이면 오히려 읽기 어렵다 */
+.kgrid{display:grid;gap:7px;grid-template-columns:repeat(auto-fill,minmax(272px,1fr))}
 /* 한 줄로 고정 — 줄바꿈되면 카드 높이가 들쭉날쭉해진다 */
 .kcard{display:flex;align-items:flex-end;gap:5px;flex-wrap:nowrap;
   background:var(--s1);border:1px solid var(--line);border-radius:8px;padding:6px 7px}
@@ -184,6 +184,7 @@ a.navlink{text-decoration:none}
 .fc.kf.sm .np{font-size:19px}
 .fc.kf.own{box-shadow:0 0 0 2px #cf6a72}
 @media(max-width:640px){
+  .kgrid{grid-template-columns:1fr}
   .fc.kf{width:54px;height:54px;flex:0 0 54px}
   .fc.kf.sm{width:44px;height:44px;flex:0 0 44px}
   .fc.kf .np{font-size:21px} .fc.kf.sm .np{font-size:16px}
