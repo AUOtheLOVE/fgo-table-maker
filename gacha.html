@@ -148,10 +148,7 @@ a.navlink{text-decoration:none}
 .bag.pick{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc)}
 .bag.pick .bag-hd{background:var(--acc);}
 .bag.pick .bag-nm{color:#fff}
-.pk{flex-shrink:0;width:20px;height:20px;border-radius:5px;border:1.5px solid var(--line);
-  background:#fff;display:inline-flex;align-items:center;justify-content:center;
-  font-size:13px;font-weight:900;color:transparent;line-height:1}
-.bag.pick .pk{background:#fff;border-color:#fff;color:var(--acc)}
+/* 담긴 표시는 색으로만 — 체크박스는 두지 않는다 */
 
 .fc{position:relative;width:86px;height:86px;flex:0 0 86px;user-select:none;cursor:default;
   border-radius:6px;overflow:hidden}
@@ -601,7 +598,6 @@ function bagHTML(b, withPick){
   const on = pick.has(bagKey(b));
   return `<div class="bag${on?' pick':''}" data-bid="${b.bid}">
     <div class="bag-hd"${withPick?` onclick="tglPick(${b.bid})"`:''}>
-      ${withPick?`<span class="pk">✓</span>`:''}
       <span class="grp ${b.grp}">${gl}</span>
       <span class="bag-nm">${esc(b.name)}</span>
     </div>
