@@ -129,7 +129,7 @@ a.navlink{text-decoration:none}
 .summary{background:var(--s1);border:1px solid var(--line);border-radius:7px;padding:10px 12px;margin-bottom:10px;font-size:12px}
 .summary .hl{color:var(--acc);font-weight:700}
 
-#bagWrap{display:grid;gap:9px}
+#bagWrap,#pickWrap{display:grid;gap:9px}
 .bag{background:var(--s1);border:1px solid var(--line);border-radius:8px;overflow:hidden;
   display:flex;flex-direction:column;transition:box-shadow .12s,border-color .12s}
 .bag-hd{display:flex;align-items:center;gap:8px;padding:6px 10px;
@@ -143,6 +143,15 @@ a.navlink{text-decoration:none}
   display:flex;align-items:center;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bag-body{display:flex;flex-wrap:wrap;gap:4px;padding:7px 8px}
+/* 고민 중인 백 — 머리를 눌러 켠다 */
+.bag-hd{cursor:pointer}
+.bag.pick{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc)}
+.bag.pick .bag-hd{background:var(--acc);}
+.bag.pick .bag-nm{color:#fff}
+.pk{flex-shrink:0;width:20px;height:20px;border-radius:5px;border:1.5px solid var(--line);
+  background:#fff;display:inline-flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:900;color:transparent;line-height:1}
+.bag.pick .pk{background:#fff;border-color:#fff;color:var(--acc)}
 
 .fc{position:relative;width:86px;height:86px;flex:0 0 86px;user-select:none;cursor:default;
   border-radius:6px;overflow:hidden}
@@ -186,7 +195,7 @@ body.skipmode .fc:hover{box-shadow:inset 0 0 0 3px var(--skp)}
   .foot .stat{width:100%;font-size:11px}
   .foot .btn{flex:1 1 0}
 
-  #bagWrap{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  #bagWrap,#pickWrap{grid-template-columns:repeat(2,minmax(0,1fr))!important}
   .fc{width:54px;height:54px;flex:0 0 54px}
   .fc .ov{font-size:26px}
   .bag-hd{padding:5px 7px;gap:5px}
@@ -247,6 +256,7 @@ body.skipmode .fc:hover{box-shadow:inset 0 0 0 3px var(--skp)}
 <div class="steps">
   <button class="step active" id="stp1" onclick="goStep(1)"><span class="num">1</span>보유 서번트</button>
   <button class="step" id="stp2" onclick="goStep(2)"><span class="num">2</span>확챠 표</button>
+  <button class="step" id="stp3" onclick="goStep(3)"><span class="num">3</span>고민 목록</button>
 </div>
 
 <!-- ══ STEP 1 ══ -->
@@ -286,9 +296,25 @@ body.skipmode .fc:hover{box-shadow:inset 0 0 0 3px var(--skp)}
     <button class="btn" id="btnSkip" onclick="tglSkipMode()">뽑기 싫은 서번트 선택</button>
     <div class="spacer"></div>
     <button class="btn danger" onclick="clearSkip()">제외 초기화</button>
+    <button class="btn acc" onclick="goStep(3)">다음 → 고민 목록</button>
   </div>
   <div class="summary" id="summary"></div>
   <div id="bagWrap"></div>
+</div>
+
+<!-- ══ STEP 3 ══ -->
+<div class="view hide" id="v3">
+  <div class="bar">
+    <span class="lbl">열</span>
+    <select class="sel" id="colSel3" onchange="applyCols()">
+      <option value="0" selected>자동 (화면 폭에 맞춤)</option>
+      <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+    </select>
+    <div class="spacer"></div>
+    <button class="btn danger" onclick="clearPick()">고민 목록 비우기</button>
+  </div>
+  <div class="summary" id="summary3"></div>
+  <div id="pickWrap"></div>
 </div>
 
 <div class="foot" id="foot">
@@ -316,6 +342,7 @@ let svtById  = new Map();
 let gachaAll = [];              // 복주머니 원본
 let events   = [];              // [{key,label,gachas:[]}]
 let bags     = [];              // [{bid,name,grp:'R'|'W'|'N',ids:[]}]
+let pick     = new Set();       // 고민 중인 백 (백 이름으로 기억한다 — bid 는 새로 그릴 때마다 바뀐다)
 let evtLabel = '';
 let own      = {};              // svtId -> np(1~5)
 let skip     = new Set();       // svtId
@@ -336,7 +363,7 @@ const CLASSES = [
   ['alterEgo|foreigner|pretender|beast','엑스트라Ⅱ'],
 ];
 const LS_OWN='fgo_gp_own_v1', LS_SKIP='fgo_gp_skip_v1', LS_BAGS='fgo_gp_bags_v1',
-      LS_OP='fgo_gp_op_v1', LS_SRV='fgo_gp_srv_v1';
+      LS_OP='fgo_gp_op_v1', LS_SRV='fgo_gp_srv_v1', LS_PICK='fgo_gp_pick_v1';
 
 /* ★5 배포 서번트 — 확챠에 안 나오므로 목록·통계에서 뺀다.
    Atlas 원본에 '배포' 여부 필드가 없어 도감번호로 직접 관리한다.
@@ -398,6 +425,7 @@ async function init(){
 function restoreLocal(){
   try{ own  = JSON.parse(localStorage.getItem(LS_OWN)  || '{}'); }catch(e){ own={}; }
   try{ skip = new Set(JSON.parse(localStorage.getItem(LS_SKIP) || '[]')); }catch(e){ skip=new Set(); }
+  try{ pick = new Set(JSON.parse(localStorage.getItem(LS_PICK) || '[]')); }catch(e){ pick=new Set(); }
   localStorage.removeItem(LS_BAGS);      // 옛 버전이 저장해둔 확챠표 청소
   try{ const v=JSON.parse(localStorage.getItem(LS_SRV)||'null');
        if(v){ srv=v.srv==='JP'?'JP':'KR'; srvManual=!!v.manual; } }catch(e){}
@@ -405,6 +433,7 @@ function restoreLocal(){
 function persist(){
   localStorage.setItem(LS_OWN,  JSON.stringify(own));
   localStorage.setItem(LS_SKIP, JSON.stringify([...skip]));
+  localStorage.setItem(LS_PICK, JSON.stringify([...pick]));
 }
 
 /* ══════════ 데이터 로드 ══════════ */
@@ -537,20 +566,40 @@ function updFoot(){
 /* ══════════ STEP 2 : 복주머니 표 ══════════ */
 function goStep(n){
   step = n;
-  document.getElementById('stp1').classList.toggle('active', n===1);
-  document.getElementById('stp2').classList.toggle('active', n===2);
-  document.getElementById('v1').classList.toggle('hide', n!==1);
-  document.getElementById('v2').classList.toggle('hide', n!==2);
+  for(const k of [1,2,3]){
+    document.getElementById('stp'+k).classList.toggle('active', n===k);
+    document.getElementById('v'+k).classList.toggle('hide', n!==k);
+  }
   document.getElementById('foot').style.display = n===1 ? '' : 'none';
   const bp = document.getElementById('btnPng');
-  if(bp) bp.title = n===1 ? '보유 체크한 그대로 이미지로 저장' : '확챠표를 이미지로 저장';
+  if(bp) bp.title = n===1 ? '보유 체크한 그대로 이미지로 저장'
+                  : n===2 ? '확챠표를 이미지로 저장' : '고민 목록을 이미지로 저장';
   if(n===2) renderBags();
+  if(n===3){ renderPick(); applyCols(); }
 }
 
 function applyCols(){
   const c = document.getElementById('colSel').value;
   document.getElementById('bagWrap').style.gridTemplateColumns =
     c === '0' ? 'repeat(auto-fill,minmax(470px,1fr))' : `repeat(${c},1fr)`;
+  const c3 = document.getElementById('colSel3').value;
+  document.getElementById('pickWrap').style.gridTemplateColumns =
+    c3 === '0' ? 'repeat(auto-fill,minmax(470px,1fr))' : `repeat(${c3},1fr)`;
+}
+
+function bagHTML(b, withPick){
+  const gl = b.grp === 'R' ? 'RED' : b.grp === 'W' ? 'WHITE' : '—';
+  const on = pick.has(b.name);
+  return `<div class="bag${on?' pick':''}" data-bid="${b.bid}">
+    <div class="bag-hd"${withPick?` onclick="tglPick('${esc(b.name).replace(/'/g,"\\'")}')"`:''}>
+      ${withPick?`<span class="pk">✓</span>`:''}
+      <span class="grp ${b.grp}">${gl}</span>
+      <span class="bag-nm">${esc(b.name)}</span>
+    </div>
+    <div class="bag-body">
+      ${b.ids.map(id => faceCell(b.bid, id)).join('')}
+    </div>
+  </div>`;
 }
 
 function renderBags(){
@@ -561,22 +610,40 @@ function renderBags(){
     document.getElementById('summary').innerHTML = '';
     return;
   }
-  wrap.innerHTML = bags.map(b => {
-    const gl = b.grp === 'R' ? 'RED' : b.grp === 'W' ? 'WHITE' : '—';
-    return `<div class="bag" data-bid="${b.bid}">
-      <div class="bag-hd">
-        <span class="grp ${b.grp}">${gl}</span>
-        <span class="bag-nm">${esc(b.name)}</span>
-      </div>
-      <div class="bag-body">
-        ${b.ids.map(id => faceCell(b.bid, id)).join('')}
-      </div>
-    </div>`;
-  }).join('');
-
+  wrap.innerHTML = bags.map(b => bagHTML(b, true)).join('');
   document.getElementById('summary').innerHTML =
-    `${esc(evtLabel || '확챠')} · 복주머니 <span class="hl">${bags.length}</span>개`;
+    `${esc(evtLabel || '확챠')} · 복주머니 <span class="hl">${bags.length}</span>개` +
+    ` · 고민 <span class="hl">${pickList().length}</span>개` +
+    `<span style="color:var(--t3);font-size:12px"> — 백 이름줄을 눌러 담으세요</span>`;
   updFoot();
+}
+
+/* 고민 목록은 백 '이름'으로 기억한다. 확챠를 다시 불러오면 bid 가 새로 매겨지기 때문이다. */
+function pickList(){ return bags.filter(b => pick.has(b.name)); }
+
+function tglPick(name){
+  pick.has(name) ? pick.delete(name) : pick.add(name);
+  persist(); renderBags(); renderPick();
+}
+function clearPick(){
+  if(!pick.size) return;
+  if(!confirm('고민 목록을 비울까요?')) return;
+  pick.clear(); persist(); renderBags(); renderPick(); toast('고민 목록을 비웠습니다');
+}
+
+function renderPick(){
+  const wrap = document.getElementById('pickWrap');
+  const list = pickList();
+  if(!list.length){
+    wrap.innerHTML = `<div class="empty"><b>고민 중인 복주머니가 없습니다</b>
+      확챠 표에서 백의 이름줄을 눌러 담으세요.</div>`;
+    document.getElementById('summary3').innerHTML = '';
+    return;
+  }
+  wrap.innerHTML = list.map(b => bagHTML(b, false)).join('');
+  document.getElementById('summary3').innerHTML =
+    `고민 중인 복주머니 <span class="hl">${list.length}</span>개` +
+    (evtLabel ? ` · ${esc(evtLabel)}` : '');
 }
 
 function setOp(v){
@@ -730,6 +797,7 @@ async function exportOwnPNG(){
 
 async function exportPNG(){
   if(step === 1) return exportOwnPNG();
+  if(step === 3 && !pickList().length){ toast('고민 목록이 비어 있습니다'); return; }
   if(!bags.length){ toast('내보낼 표가 없습니다'); return; }
   if(skipMode) tglSkipMode();
   toast('이미지 만드는 중…');
@@ -737,8 +805,9 @@ async function exportPNG(){
   // 화면 요소를 그대로 찍으면 스크롤 영역·여백 때문에 아래가 텅 비고 끝줄이 잘린다.
   // 표만 복제해 화면 밖 컨테이너에 담고 그것만 찍는다.
   // 폰에서 찍으면 화면이 좁아 표가 찌그러진다. 내보내기는 화면 폭과 무관하게 고정 3열로 그린다.
-  const wrap = document.getElementById('bagWrap');
-  const COL = 3, COLW = 470, GAP = 9;
+  const wrap = document.getElementById(step === 3 ? 'pickWrap' : 'bagWrap');
+  const n = step === 3 ? pickList().length : bags.length;
+  const COL = Math.min(3, Math.max(1, n)), COLW = 470, GAP = 9;
   const W = COL*COLW + (COL-1)*GAP;
   const box = document.createElement('div');
   box.className='pngbox';
@@ -746,7 +815,7 @@ async function exportPNG(){
     padding:14px; background:#f7f5f0; box-sizing:border-box;`;
   const ttl = document.createElement('div');
   ttl.style.cssText = 'font-size:15px;font-weight:700;color:#1a1814;margin:2px 2px 11px';
-  ttl.textContent = evtLabel || '복주머니';
+  ttl.textContent = (evtLabel || '복주머니') + (step === 3 ? ' — 고민 목록' : '');
   const clone = wrap.cloneNode(true);
   clone.removeAttribute('id');
   clone.style.cssText = getComputedStyle(wrap).cssText || '';
@@ -756,7 +825,7 @@ async function exportPNG(){
   clone.style.width = W + 'px';
 
   box.appendChild(ttl); box.appendChild(clone);
-  await bakePNG(box, `복주머니_${new Date().toISOString().slice(0,10)}.png`);
+  await bakePNG(box, `${step===3?'고민목록':'복주머니'}_${new Date().toISOString().slice(0,10)}.png`);
 }
 
 
