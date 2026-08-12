@@ -162,14 +162,17 @@ a.navlink{text-decoration:none}
   background:var(--s2);border:1px solid var(--line);border-radius:7px}
 /* 한 가챠 = 박스 하나. 한 줄에 여러 개 깔아 스크롤을 줄인다 (확챠표와 같은 방식) */
 .kgrid{display:grid;gap:7px;grid-template-columns:repeat(auto-fill,minmax(238px,1fr))}
-.kcard{display:flex;align-items:flex-end;gap:5px;flex-wrap:wrap;
+.kcard{display:flex;flex-direction:column;align-items:flex-start;gap:5px;
   background:var(--s1);border:1px solid var(--line);border-radius:8px;padding:6px 7px}
+.kmain{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.kalt{display:flex;align-items:flex-start;gap:9px;flex-wrap:wrap}
 .kgrp{display:flex;flex-direction:column;align-items:center;gap:2px}
 .kgrp>.row{display:flex;gap:4px}
 .kgrp>.cap{font-size:10px;color:var(--t3);font-weight:700;line-height:1}
 .kgrp.re>.cap{color:var(--acc)}
 .kgrp.re.al>.cap{color:var(--wht)}
-.kgrp.re{padding-left:5px;border-left:1px dashed var(--line)}
+.kgrp.re{padding-left:6px;border-left:1px dashed var(--line)}
+.kgrp>.cap{order:-1}
 .fc.kf{width:66px;height:66px;flex:0 0 66px;border-radius:7px}
 .fc.kf.sm{width:52px;height:52px;flex:0 0 52px}
 .fc.kf .np{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
@@ -647,12 +650,13 @@ function renderKanui(){
     <div class="ksec" id="k_${o.c}">
       <h3>${esc(o.l)}</h3>
       <div class="kgrid">${o.r.map(r => `<div class="kcard">
-        ${kanFace(r.a)}
-        <span class="kgrp"><span class="row">${r.b.map(i=>kanFace(i,true)).join('')}</span></span>
-        ${r.k ? `<span class="kgrp re"><span class="cap">복각</span>
-                 <span class="row">${r.k.map(i=>kanFace(i,true)).join('')}</span></span>` : ''}
-        ${r.z ? `<span class="kgrp re al"><span class="cap">올캐러</span>
-                 <span class="row">${r.z.map(i=>kanFace(i,true)).join('')}</span></span>` : ''}
+        <span class="kmain">${kanFace(r.a)}${r.b.map(i=>kanFace(i,true)).join('')}</span>
+        ${(r.k||r.z) ? `<span class="kalt">
+          ${r.k ? `<span class="kgrp re"><span class="cap">복각</span>
+                   <span class="row">${r.k.map(i=>kanFace(i,true)).join('')}</span></span>` : ''}
+          ${r.z ? `<span class="kgrp re al"><span class="cap">올캐러</span>
+                   <span class="row">${r.z.map(i=>kanFace(i,true)).join('')}</span></span>` : ''}
+        </span>` : ''}
       </div>`).join('')}</div>
     </div>`).join('');
 }
