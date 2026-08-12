@@ -164,7 +164,8 @@ a.navlink{text-decoration:none}
 /* 한 가챠 = 박스 하나. 한 줄에 여러 개 깔아 스크롤을 줄인다 (확챠표와 같은 방식) */
 /* 화면 폭을 채우게 늘린다. 서번트가 적은 백은 카드 안 오른쪽이 비지만 그게 낫다.
    칸 폭을 고정하면 넓은 화면에서 오른쪽이 통째로 남는다 */
-.kgrid{display:grid;gap:7px;grid-template-columns:repeat(auto-fit,minmax(var(--kw,272px),1fr))}
+/* auto-fit 은 남는 칸이 있으면 채워진 칸을 늘려버려 좁게 잡은 폭이 무시된다 → auto-fill */
+.kgrid{display:grid;gap:7px;grid-template-columns:repeat(auto-fill,minmax(var(--kw,272px),1fr))}
 /* 한 줄로 고정 — 줄바꿈되면 카드 높이가 들쭉날쭉해진다 */
 .kcard{display:flex;align-items:flex-end;gap:5px;flex-wrap:nowrap;
   background:var(--s1);border:1px solid var(--line);border-radius:8px;padding:6px 7px}
