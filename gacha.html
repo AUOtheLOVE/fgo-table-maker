@@ -164,7 +164,7 @@ a.navlink{text-decoration:none}
 /* 한 가챠 = 박스 하나. 한 줄에 여러 개 깔아 스크롤을 줄인다 (확챠표와 같은 방식) */
 /* 화면 폭을 채우게 늘린다. 서번트가 적은 백은 카드 안 오른쪽이 비지만 그게 낫다.
    칸 폭을 고정하면 넓은 화면에서 오른쪽이 통째로 남는다 */
-.kgrid{display:grid;gap:7px;grid-template-columns:repeat(auto-fit,minmax(272px,1fr))}
+.kgrid{display:grid;gap:7px;grid-template-columns:repeat(auto-fit,minmax(var(--kw,272px),1fr))}
 /* 한 줄로 고정 — 줄바꿈되면 카드 높이가 들쭉날쭉해진다 */
 .kcard{display:flex;align-items:flex-end;gap:5px;flex-wrap:nowrap;
   background:var(--s1);border:1px solid var(--line);border-radius:8px;padding:6px 7px}
@@ -651,6 +651,14 @@ function kanFace(id, small){
   </div>`;
 }
 
+/* 클래스마다 최대 칸 수가 다르다(아처는 ★5+★4 둘뿐, 세이버는 넷).
+   그 클래스에 필요한 만큼만 칸을 잡아 빈 자리를 줄인다. */
+function kanWidth(o){
+  const b = Math.max(...o.r.map(r => (r.b||[]).length));
+  const a = Math.max(...o.r.map(r => (r.k?1:0) + (r.z?1:0)));
+  return 14 + 66 + b*57 + (a ? 5 + a*59 + (a-1)*7 : 0) + 2;
+}
+
 function renderKanui(){
   const nav = document.getElementById('kanNav');
   const wrap = document.getElementById('kanWrap');
@@ -659,7 +667,7 @@ function renderKanui(){
   ).join('');
   wrap.innerHTML = kanui.g.map(o => `
     <div class="ksec" id="k_${o.c}">
-      <div class="kgrid">
+      <div class="kgrid" style="--kw:${kanWidth(o)}px">
         <h3>${esc(o.l)}</h3>${o.r.map(r => `<div class="kcard">
         <span class="kmain">${kanFace(r.a)}${r.b.map(i=>kanFace(i,true)).join('')}</span>
         ${(r.k||r.z) ? `<span class="kalt">
