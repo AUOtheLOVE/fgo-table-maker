@@ -256,7 +256,7 @@ body.skipmode .fc:hover{box-shadow:inset 0 0 0 3px var(--skp)}
 <div class="steps">
   <button class="step active" id="stp1" onclick="goStep(1)"><span class="num">1</span>보유 서번트</button>
   <button class="step" id="stp2" onclick="goStep(2)"><span class="num">2</span>확챠 표</button>
-  <button class="step" id="stp3" onclick="goStep(3)"><span class="num">3</span>고민 목록</button>
+  <button class="step" id="stp3" onclick="goStep(3)"><span class="num">3</span>어디를 돌릴까</button>
 </div>
 
 <!-- ══ STEP 1 ══ -->
@@ -296,7 +296,6 @@ body.skipmode .fc:hover{box-shadow:inset 0 0 0 3px var(--skp)}
     <button class="btn" id="btnSkip" onclick="tglSkipMode()">뽑기 싫은 서번트 선택</button>
     <div class="spacer"></div>
     <button class="btn danger" onclick="clearSkip()">제외 초기화</button>
-    <button class="btn acc" onclick="goStep(3)">다음 → 고민 목록</button>
   </div>
   <div class="summary" id="summary"></div>
   <div id="bagWrap"></div>
@@ -324,6 +323,12 @@ body.skipmode .fc:hover{box-shadow:inset 0 0 0 3px var(--skp)}
   <button class="btn acc" id="btnGo" onclick="goStep(2)">확인 → 확챠 표 보기</button>
 </div>
 
+<!-- 2단계 전용 아래 바 — 버튼 하나만 -->
+<div class="foot" id="foot2" style="display:none">
+  <div class="spacer"></div>
+  <button class="btn acc" onclick="goStep(3)">다음 → 어디를 돌릴까</button>
+</div>
+
 <!-- 인식 진행 표시 -->
 <div class="mbg" id="recOv">
   <div class="mbox" style="width:min(360px,90vw);align-items:center;padding:26px 20px;text-align:center">
@@ -342,7 +347,8 @@ let svtById  = new Map();
 let gachaAll = [];              // 복주머니 원본
 let events   = [];              // [{key,label,gachas:[]}]
 let bags     = [];              // [{bid,name,grp:'R'|'W'|'N',ids:[]}]
-let pick     = new Set();       // 고민 중인 백 (백 이름으로 기억한다 — bid 는 새로 그릴 때마다 바뀐다)
+let pick     = new Set();       // 고민 중인 백. bid 는 새로 그릴 때마다 바뀌므로 '그룹|이름' 으로 기억한다.
+                                // 이름만 쓰면 안 된다 — 여성/남성에 '삼기사 · 버스터보구 ①' 처럼 같은 이름이 있다.
 let evtLabel = '';
 let own      = {};              // svtId -> np(1~5)
 let skip     = new Set();       // svtId
@@ -570,10 +576,11 @@ function goStep(n){
     document.getElementById('stp'+k).classList.toggle('active', n===k);
     document.getElementById('v'+k).classList.toggle('hide', n!==k);
   }
-  document.getElementById('foot').style.display = n===1 ? '' : 'none';
+  document.getElementById('foot').style.display  = n===1 ? '' : 'none';
+  document.getElementById('foot2').style.display = n===2 ? '' : 'none';
   const bp = document.getElementById('btnPng');
   if(bp) bp.title = n===1 ? '보유 체크한 그대로 이미지로 저장'
-                  : n===2 ? '확챠표를 이미지로 저장' : '고민 목록을 이미지로 저장';
+                  : n===2 ? '확챠표를 이미지로 저장' : '고민 중인 복주머니를 이미지로 저장';
   if(n===2) renderBags();
   if(n===3){ renderPick(); applyCols(); }
 }
@@ -587,11 +594,13 @@ function applyCols(){
     c3 === '0' ? 'repeat(auto-fill,minmax(470px,1fr))' : `repeat(${c3},1fr)`;
 }
 
+const bagKey = b => b.grp + '|' + b.name;
+
 function bagHTML(b, withPick){
   const gl = b.grp === 'R' ? 'RED' : b.grp === 'W' ? 'WHITE' : '—';
-  const on = pick.has(b.name);
+  const on = pick.has(bagKey(b));
   return `<div class="bag${on?' pick':''}" data-bid="${b.bid}">
-    <div class="bag-hd"${withPick?` onclick="tglPick('${esc(b.name).replace(/'/g,"\\'")}')"`:''}>
+    <div class="bag-hd"${withPick?` onclick="tglPick(${b.bid})"`:''}>
       ${withPick?`<span class="pk">✓</span>`:''}
       <span class="grp ${b.grp}">${gl}</span>
       <span class="bag-nm">${esc(b.name)}</span>
@@ -619,10 +628,13 @@ function renderBags(){
 }
 
 /* 고민 목록은 백 '이름'으로 기억한다. 확챠를 다시 불러오면 bid 가 새로 매겨지기 때문이다. */
-function pickList(){ return bags.filter(b => pick.has(b.name)); }
+function pickList(){ return bags.filter(b => pick.has(bagKey(b))); }
 
-function tglPick(name){
-  pick.has(name) ? pick.delete(name) : pick.add(name);
+function tglPick(bid){
+  const b = bags.find(x => x.bid === bid);
+  if(!b) return;
+  const k = bagKey(b);
+  pick.has(k) ? pick.delete(k) : pick.add(k);
   persist(); renderBags(); renderPick();
 }
 function clearPick(){
@@ -634,9 +646,8 @@ function clearPick(){
 function renderPick(){
   const wrap = document.getElementById('pickWrap');
   const list = pickList();
-  if(!list.length){
-    wrap.innerHTML = `<div class="empty"><b>고민 중인 복주머니가 없습니다</b>
-      확챠 표에서 백의 이름줄을 눌러 담으세요.</div>`;
+  if(!list.length){          // 안내문 없이 비워 둔다
+    wrap.innerHTML = '';
     document.getElementById('summary3').innerHTML = '';
     return;
   }
@@ -807,7 +818,9 @@ async function exportPNG(){
   // 폰에서 찍으면 화면이 좁아 표가 찌그러진다. 내보내기는 화면 폭과 무관하게 고정 3열로 그린다.
   const wrap = document.getElementById(step === 3 ? 'pickWrap' : 'bagWrap');
   const n = step === 3 ? pickList().length : bags.length;
-  const COL = Math.min(3, Math.max(1, n)), COLW = 470, GAP = 9;
+  // 고민 목록은 2열로 굽는다 (확챠표는 예전대로 3열)
+  const COL = step === 3 ? Math.min(2, Math.max(1, n)) : 3;
+  const COLW = 470, GAP = 9;
   const W = COL*COLW + (COL-1)*GAP;
   const box = document.createElement('div');
   box.className='pngbox';
