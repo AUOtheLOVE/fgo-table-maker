@@ -159,7 +159,6 @@ a.navlink{text-decoration:none}
 .ksec{margin:0 0 16px;scroll-margin-top:64px}
 .ksec>h3{font-size:15px;font-weight:800;margin:0 0 7px;padding:5px 10px;
   background:var(--s2);border:1px solid var(--line);border-radius:7px}
-.ksec>h3 span{font-weight:600;color:var(--t3);font-size:12px;margin-left:6px}
 /* 한 가챠 = 박스 하나. 한 줄에 여러 개 깔아 스크롤을 줄인다 (확챠표와 같은 방식) */
 .kgrid{display:grid;gap:7px;grid-template-columns:repeat(auto-fill,minmax(198px,1fr))}
 .kcard{display:flex;align-items:flex-end;gap:5px;flex-wrap:wrap;
@@ -644,7 +643,7 @@ function renderKanui(){
   ).join('');
   wrap.innerHTML = kanui.g.map(o => `
     <div class="ksec" id="k_${o.c}">
-      <h3>${esc(o.l)}<span>${esc(o.d)} · ★5 ${o.r.length}기${o.n>1?' · 2회 개최':''}</span></h3>
+      <h3>${esc(o.l)}</h3>
       <div class="kgrid">${o.r.map(r => `<div class="kcard">
         ${kanFace(r.a)}
         <span class="kgrp"><span class="row">${r.b.map(i=>kanFace(i,true)).join('')}</span></span>
